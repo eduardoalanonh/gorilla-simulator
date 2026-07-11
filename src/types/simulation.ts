@@ -36,6 +36,7 @@ export interface EffectEvent {
     | "shout"
     | "scream"
     | "damage"
+    | "killstreak"
     | "gorillaStep"
     | "gorillaDie";
   x: number;
@@ -48,8 +49,18 @@ export interface EffectEvent {
   source?: "gorilla" | "men";
 }
 
+/** Amostra da linha do tempo da batalha (para o gráfico final). */
+export interface HistorySample {
+  t: number;
+  deaths: number;
+  gorillaHp: number;
+}
+
+export type BattleMode = "classic" | "horde";
+
 export interface BattleResults {
   winner: Winner;
+  mode: BattleMode;
   durationSec: number;
   initialMen: number;
   survivors: number;

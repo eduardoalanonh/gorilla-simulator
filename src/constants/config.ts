@@ -45,6 +45,8 @@ export const GORILLA_BASE: FighterStats & { roarCooldown: number } = {
   roarCooldown: 14,
 };
 
+export type FighterRig = "human" | "dog" | "robot";
+
 /** Multiplicadores aplicados sobre os stats base. */
 export interface StatModifier {
   id: string;
@@ -56,6 +58,8 @@ export interface StatModifier {
   range: number;
   cooldown: number;
   crit: number;
+  /** Modelo visual do combatente */
+  rig: FighterRig;
 }
 
 const mod = (
@@ -73,6 +77,7 @@ const mod = (
   range: 1,
   cooldown: 1,
   crit: 1,
+  rig: "human",
   ...m,
 });
 
@@ -96,11 +101,26 @@ export const MEN_MODIFIERS: StatModifier[] = [
     damage: 1.8,
     range: 1.6,
   }),
-  mod("medieval", "Medieval", "Armaduras e lâminas", {
+  mod("medieval", "Cavaleiros medievais", "Armadura, espada e escudo", {
     health: 1.9,
     damage: 2.6,
     speed: 0.92,
     range: 1.4,
+  }),
+  mod("caes", "Cães de guerra", "Rápidos, ferozes e frágeis", {
+    health: 0.6,
+    damage: 1.5,
+    speed: 1.5,
+    range: 0.9,
+    cooldown: 0.8,
+    rig: "dog",
+  }),
+  mod("robos", "Robôs", "Blindagem pesada, socos hidráulicos", {
+    health: 2.6,
+    damage: 2.2,
+    speed: 0.8,
+    cooldown: 1.25,
+    rig: "robot",
   }),
 ];
 
@@ -180,6 +200,30 @@ export const AI = {
   rageThreshold: 0.25,
   rageCooldownFactor: 0.8,
   rageSpeedFactor: 1.15,
+};
+
+export const HORDE = {
+  /** Intervalo entre levas de reforço (s) */
+  spawnInterval: 0.55,
+  /** Quantos entram por leva */
+  spawnBatch: 5,
+  /** Distância da borda onde os reforços surgem */
+  edgeMargin: 7,
+};
+
+/** Marcos de kill streak: [mínimo de kills num golpe, texto] */
+export const KILL_STREAKS: [number, string][] = [
+  [10, "EXTINÇÃO!!!"],
+  [7, "MASSACRE!!"],
+  [5, "RAMPAGE!"],
+  [4, "QUAD KILL"],
+  [3, "TRIPLE KILL"],
+  [2, "DOUBLE KILL"],
+];
+
+export const CHART_COLORS = {
+  deaths: "#ea580c",
+  gorillaHp: "#0284c7",
 };
 
 export const SPEED_OPTIONS = [0.5, 1, 2, 5, 10] as const;
