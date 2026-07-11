@@ -34,12 +34,18 @@ export interface EffectEvent {
     | "roar"
     | "land"
     | "shout"
+    | "scream"
+    | "damage"
     | "gorillaStep"
     | "gorillaDie";
   x: number;
   y: number;
   z: number;
   power: number;
+  /** Golpe crítico (dano dobrado) */
+  crit?: boolean;
+  /** Quem causou o dano (cor do número flutuante) */
+  source?: "gorilla" | "men";
 }
 
 export interface BattleResults {

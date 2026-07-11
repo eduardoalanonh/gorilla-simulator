@@ -155,6 +155,7 @@ export function SimulationLoop() {
       for (const e of sim.effects) {
         fx.pool?.handleEvent(e);
         audioManager.handleEvent(e);
+        if (e.type === "damage") fx.numbers?.spawn(e);
         if (e.type === "roar") fx.shake = Math.max(fx.shake, 0.5);
         else if (e.type === "slam") fx.shake = Math.max(fx.shake, 0.4);
         else if (e.type === "gorillaDie") fx.shake = Math.max(fx.shake, 0.8);
@@ -163,6 +164,7 @@ export function SimulationLoop() {
     }
 
     fx.pool?.update(dt * speedFactor);
+    fx.numbers?.update(dt * speedFactor);
     audioManager.setCrowdIntensity(
       sim.running ? Math.min(1, sim.aliveCount / 220) : 0,
     );

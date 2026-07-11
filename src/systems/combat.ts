@@ -34,6 +34,14 @@ export function manAttack(sim: Simulation, i: number) {
       sim.posZ[i],
       roll.crit ? 1.6 : 1,
     );
+    // Críticos dos homens também mostram o número subindo
+    if (roll.crit) {
+      const p = g.body.translation();
+      sim.emit("damage", p.x, p.y + 1.6, p.z, roll.amount, {
+        crit: true,
+        source: "men",
+      });
+    }
   }
 }
 
@@ -68,11 +76,24 @@ export function gorillaHitMan(
     sim.airborne[i] = 1;
   }
 
-  sim.emit("impact", sim.posX[i], sim.posY[i] + 0.5, sim.posZ[i], roll.crit ? 1.5 : 1);
+  sim.emit("impact", sim.posX[i], sim.posY[i] + 0.5, sim.posZ[i], roll.crit ? 1.5 : 1, {
+    crit: roll.crit,
+  });
+  // Número de dano flutuante (sempre no crítico, às vezes no golpe normal)
+  if (roll.crit || Math.random() < 0.45) {
+    sim.emit("damage", sim.posX[i], sim.posY[i] + 1.3, sim.posZ[i], dmg, {
+      crit: roll.crit,
+      source: "gorilla",
+    });
+  }
 
   if (sim.hp[i] <= 0) killMan(sim, i);
   else if (sim.state[i] !== EntityState.Dead) {
     sim.state[i] = EntityState.Recovering;
+    // Sobrevoando a arena aos berros
+    if (Math.random() < 0.5) {
+      sim.emit("scream", sim.posX[i], sim.posY[i] + 1, sim.posZ[i], 1);
+    }
   }
 }
 

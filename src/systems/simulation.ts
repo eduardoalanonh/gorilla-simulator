@@ -35,6 +35,8 @@ export interface GorillaState {
   hitsDealt: number;
   damageDealt: number;
   deathT: number;
+  /** Fúria: ativa com pouca vida — mais rápido e golpes mais frequentes */
+  enraged: boolean;
 }
 
 /**
@@ -117,11 +119,20 @@ export class Simulation {
       hitsDealt: 0,
       damageDealt: 0,
       deathT: -1,
+      enraged: false,
     };
   }
 
-  emit(type: EffectEvent["type"], x: number, y: number, z: number, power = 1) {
-    if (this.effects.length < 256) this.effects.push({ type, x, y, z, power });
+  emit(
+    type: EffectEvent["type"],
+    x: number,
+    y: number,
+    z: number,
+    power = 1,
+    extra?: Pick<EffectEvent, "crit" | "source">,
+  ) {
+    if (this.effects.length < 256)
+      this.effects.push({ type, x, y, z, power, ...extra });
   }
 
   /** Reinicia stats e contadores para uma nova batalha (corpos são reposicionados fora daqui). */

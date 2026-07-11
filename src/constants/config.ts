@@ -39,7 +39,7 @@ export const GORILLA_BASE: FighterStats & { roarCooldown: number } = {
   moveSpeed: 7,
   attackRange: 3,
   attackCooldown: 1.35,
-  critChance: 0.15,
+  critChance: 0.22,
   critMultiplier: 2,
   knockbackForce: 11,
   roarCooldown: 14,
@@ -176,6 +176,10 @@ export const AI = {
   gorillaSlamThreshold: 9,
   roarFearRadius: 13,
   corpseSettleTime: 2.8,
+  /** Modo enfurecido: ativa abaixo desta fração de vida do gorila */
+  rageThreshold: 0.25,
+  rageCooldownFactor: 0.8,
+  rageSpeedFactor: 1.15,
 };
 
 export const SPEED_OPTIONS = [0.5, 1, 2, 5, 10] as const;

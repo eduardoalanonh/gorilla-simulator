@@ -14,6 +14,10 @@ type SoundName =
   | "thud"
   | "shout"
   | "roar"
+  | "groan1"
+  | "groan2"
+  | "scream"
+  | "crit"
   | "gorillaStep"
   | "gorillaDie";
 
@@ -44,6 +48,46 @@ function lowpass(buffer: AudioBuffer, alpha: number) {
     prev = prev + alpha * (data[i] - prev);
     data[i] = prev;
   }
+}
+
+/** Bandpass biquad (RBJ) — retorna cópia filtrada do sinal. */
+function bandpass(data: Float32Array, sr: number, freq: number, q: number) {
+  const out = new Float32Array(data.length);
+  const w0 = (2 * Math.PI * freq) / sr;
+  const alpha = Math.sin(w0) / (2 * q);
+  const b0 = alpha;
+  const b2 = -alpha;
+  const a0 = 1 + alpha;
+  const a1 = -2 * Math.cos(w0);
+  const a2 = 1 - alpha;
+  let x1 = 0, x2 = 0, y1 = 0, y2 = 0;
+  for (let i = 0; i < data.length; i++) {
+    const x = data[i];
+    const y = (b0 * x + b2 * x2 - a1 * y1 - a2 * y2) / a0;
+    x2 = x1;
+    x1 = x;
+    y2 = y1;
+    y1 = y;
+    out[i] = y;
+  }
+  return out;
+}
+
+/** Dá timbre de voz ao sinal somando ressonâncias de formantes ("aah/ugh"). */
+function applyFormants(
+  buffer: AudioBuffer,
+  formants: [freq: number, q: number, amp: number][],
+) {
+  const data = buffer.getChannelData(0);
+  const dry = data.slice();
+  data.fill(0);
+  for (const [freq, q, amp] of formants) {
+    const wet = bandpass(dry, buffer.sampleRate, freq, q);
+    for (let i = 0; i < data.length; i++) data[i] += wet[i] * amp;
+  }
+  let peak = 0;
+  for (let i = 0; i < data.length; i++) peak = Math.max(peak, Math.abs(data[i]));
+  if (peak > 0) for (let i = 0; i < data.length; i++) data[i] = (data[i] / peak) * 0.9;
 }
 
 const env = (t: number, attack: number, decay: number) =>
@@ -168,6 +212,57 @@ export class AudioManager {
     lowpass(roar, 0.25);
     b.set("roar", roar);
 
+    // Gemidos cômicos de morte: "uôôh" grave e "agh!" curto
+    const groan1 = makeBuffer(ctx, 0.42, (t) => {
+      const f = (128 - t * 110) * (1 + 0.06 * Math.sin(2 * Math.PI * 7 * t));
+      const saw = 2 * ((t * f) % 1) - 1;
+      const breath = (Math.random() * 2 - 1) * 0.14;
+      return Math.tanh(saw * 1.8 + breath) * env(t, 0.025, 0.16);
+    });
+    applyFormants(groan1, [
+      [420, 4, 1],
+      [850, 5, 0.75],
+      [1350, 6, 0.3],
+    ]);
+    b.set("groan1", groan1);
+
+    const groan2 = makeBuffer(ctx, 0.3, (t) => {
+      const f = (185 - t * 160) * (1 + 0.05 * Math.sin(2 * Math.PI * 9 * t));
+      const saw = 2 * ((t * f) % 1) - 1;
+      return Math.tanh(saw * 2) * env(t, 0.015, 0.1);
+    });
+    applyFormants(groan2, [
+      [560, 4, 1],
+      [1050, 5, 0.7],
+    ]);
+    b.set("groan2", groan2);
+
+    // Grito cômico de quem sai voando: "aaaah!" descendo
+    const scream = makeBuffer(ctx, 0.85, (t) => {
+      const f = (470 - t * 240) * (1 + 0.08 * Math.sin(2 * Math.PI * 9.5 * t));
+      const saw = 2 * ((t * f) % 1) - 1;
+      const e = env(t, 0.04, 0.4) * (t < 0.7 ? 1 : (0.85 - t) / 0.15);
+      return Math.tanh(saw * 1.6) * Math.max(e, 0);
+    });
+    applyFormants(scream, [
+      [720, 5, 1],
+      [1150, 5, 0.7],
+      [2400, 8, 0.25],
+    ]);
+    b.set("scream", scream);
+
+    // "POW" de golpe crítico: soco profundo + ping curto
+    b.set(
+      "crit",
+      makeBuffer(ctx, 0.3, (t) => {
+        const boom = Math.sin(2 * Math.PI * (58 - t * 60) * t) * env(t, 0.004, 0.09);
+        const ping =
+          Math.sin(2 * Math.PI * (760 - t * 240) * t) * env(t, 0.002, 0.045) * 0.4;
+        const snap = (Math.random() * 2 - 1) * env(t, 0.001, 0.02) * 0.5;
+        return boom * 1.2 + ping + snap;
+      }),
+    );
+
     const step = makeBuffer(ctx, 0.16, (t) => {
       const boom = Math.sin(2 * Math.PI * 58 * t) * env(t, 0.004, 0.045);
       return boom + (Math.random() * 2 - 1) * env(t, 0.002, 0.02) * 0.3;
@@ -229,7 +324,23 @@ export class AudioManager {
         this.play("slam", e.x, e.y, e.z, 1, 0.1, 0.2);
         break;
       case "death":
-        this.play("thud", e.x, e.y, e.z, 0.55, 0.25, 0.08);
+        this.play(
+          Math.random() < 0.5 ? "groan1" : "groan2",
+          e.x,
+          e.y + 1,
+          e.z,
+          0.6,
+          0.35,
+          0.07,
+        );
+        this.play("thud", e.x, e.y, e.z, 0.3, 0.25, 0.12);
+        break;
+      case "scream":
+        this.play("scream", e.x, e.y, e.z, 0.42, 0.3, 0.18);
+        break;
+      case "damage":
+        if (e.crit)
+          this.play("crit", e.x, e.y, e.z, e.source === "men" ? 0.5 : 0.9, 0.12, 0.1);
         break;
       case "land":
         this.play("thud", e.x, e.y, e.z, 0.4 * e.power, 0.3, 0.1);

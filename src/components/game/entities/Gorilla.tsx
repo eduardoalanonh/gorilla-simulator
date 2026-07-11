@@ -49,6 +49,11 @@ export function Gorilla() {
     root.current.position.set(p.x, p.y - PHYSICS.gorillaRadius, p.z);
     root.current.rotation.y = g.facing;
 
+    // Fúria: olhos em brasa
+    EYE.emissiveIntensity = g.enraged
+      ? 3 + Math.sin(state.clock.elapsedTime * 10) * 0.8
+      : 0.35;
+
     const clock = state.clock.elapsedTime;
     const v = body.linvel();
     const speed = Math.sqrt(v.x * v.x + v.z * v.z);

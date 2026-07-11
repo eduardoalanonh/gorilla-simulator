@@ -224,6 +224,14 @@ export function updateGorilla(sim: Simulation, dt: number) {
   g.roarCooldown -= dt;
   g.retargetTimer -= dt;
 
+  // Fúria: com pouca vida, ruge na hora e luta mais rápido
+  if (!g.enraged && g.hp <= g.maxHp * AI.rageThreshold) {
+    g.enraged = true;
+    g.roarCooldown = 0;
+  }
+  const rageCd = g.enraged ? AI.rageCooldownFactor : 1;
+  const rageSpeed = g.enraged ? AI.rageSpeedFactor : 1;
+
   // Retarget: homem mais próximo com bônus para aglomerações
   if (g.retargetTimer <= 0) {
     g.retargetTimer = AI.gorillaRetargetInterval;
@@ -309,7 +317,7 @@ export function updateGorilla(sim: Simulation, dt: number) {
     g.action = slam ? "slam" : "swipe";
     g.actionT = 0;
     g.state = EntityState.Attacking;
-    g.attackCooldown = stats.attackCooldown * (slam ? 1.5 : 1);
+    g.attackCooldown = stats.attackCooldown * (slam ? 1.5 : 1) * rageCd;
     sim.emit("swipe", pos.x, pos.y, pos.z, slam ? 1.5 : 1);
     return;
   }
@@ -318,7 +326,7 @@ export function updateGorilla(sim: Simulation, dt: number) {
   if (dist > attackDist * 0.7) {
     g.state = EntityState.Running;
     g.action = "run";
-    const speed = stats.moveSpeed;
+    const speed = stats.moveSpeed * rageSpeed;
 
     // Sem progresso na perseguição (pedra no caminho) → contorna
     if (g.lastDist - dist < 0.02 * dt * 60) {

@@ -11,6 +11,7 @@ import { Men } from "./entities/Men";
 import { Gorilla } from "./entities/Gorilla";
 import { HealthBars } from "./entities/HealthBars";
 import { ParticlesRenderer } from "./ParticlesRenderer";
+import { DamageNumbersRenderer } from "./DamageNumbersRenderer";
 import { AudioRig } from "./AudioRig";
 import { SimulationLoop } from "./SimulationLoop";
 import { CameraRig } from "./CameraRig";
@@ -74,6 +75,7 @@ export function GameCanvas() {
           <SimulationLoop />
         </Physics>
         <ParticlesRenderer />
+        <DamageNumbersRenderer />
         <AudioRig />
         <CameraRig />
         <Effects />

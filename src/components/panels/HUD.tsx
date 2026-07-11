@@ -36,7 +36,9 @@ export function HUD() {
         className="pointer-events-none fixed left-1/2 top-4 z-30 w-[min(420px,42vw)] -translate-x-1/2"
       >
         <div className="mb-1 flex items-center justify-between text-xs font-semibold">
-          <span className="text-amber-200">🦍 Gorila</span>
+          <span className={hpFrac <= 0.25 && gorillaHp > 0 ? "text-red-400" : "text-amber-200"}>
+            {hpFrac <= 0.25 && gorillaHp > 0 ? "😡 Gorila ENFURECIDO" : "🦍 Gorila"}
+          </span>
           <span className="font-mono text-zinc-300">
             {gorillaHp.toLocaleString("pt-BR")} / {gorillaMaxHp.toLocaleString("pt-BR")}
           </span>
