@@ -93,6 +93,137 @@ function applyFormants(
 const env = (t: number, attack: number, decay: number) =>
   t < attack ? t / attack : Math.exp(-(t - attack) / decay);
 
+/** Faz o fim do loop desvanecer sobre o início (loop sem clique). */
+function crossfadeLoop(buffer: AudioBuffer, fadeSec: number) {
+  const data = buffer.getChannelData(0);
+  const n = Math.min(Math.floor(fadeSec * buffer.sampleRate), data.length >> 1);
+  for (let i = 0; i < n; i++) {
+    const t = i / n;
+    data[data.length - n + i] = data[data.length - n + i] * (1 - t) + data[i] * t;
+  }
+}
+
+/**
+ * Batida de tambor aditiva com queda de pitch e clique de ataque.
+ * Escreve com wrap-around para o loop fechar perfeito.
+ */
+function addDrumHit(
+  data: Float32Array,
+  sr: number,
+  t0: number,
+  freq: number,
+  amp: number,
+  decay: number,
+) {
+  const len = Math.floor(decay * 5 * sr);
+  const start = Math.floor(t0 * sr);
+  let phase = 0;
+  for (let i = 0; i < len; i++) {
+    const t = i / sr;
+    const f = freq * (1 - 0.25 * Math.min(t / decay, 1));
+    phase += (2 * Math.PI * f) / sr;
+    const e = env(t, 0.003, decay);
+    const click = i < sr * 0.008 ? (Math.random() * 2 - 1) * 0.35 : 0;
+    data[(start + i) % data.length] += (Math.sin(phase) + click) * e * amp;
+  }
+}
+
+/** Tick de chocalho: ruído curto com highpass grosseiro (diferenciação). */
+function addShakerTick(data: Float32Array, sr: number, t0: number, amp: number) {
+  const len = Math.floor(0.05 * sr);
+  const start = Math.floor(t0 * sr);
+  let prev = 0;
+  for (let i = 0; i < len; i++) {
+    const white = Math.random() * 2 - 1;
+    const hp = white - prev;
+    prev = white;
+    data[(start + i) % data.length] += hp * env(i / sr, 0.002, 0.018) * amp;
+  }
+}
+
+/**
+ * Loop de tambores tribais (2 compassos, 120 BPM). A camada pesada adiciona
+ * bumbo de guerra, batidas dobradas e virada de toms no fim do ciclo.
+ */
+function makeDrumLoop(ctx: AudioContext, heavy: boolean) {
+  const duration = 4;
+  const sr = ctx.sampleRate;
+  const buffer = ctx.createBuffer(1, sr * duration, sr);
+  const data = buffer.getChannelData(0);
+  const bar = 2;
+
+  for (let b = 0; b < 2; b++) {
+    const o = b * bar;
+    if (!heavy) {
+      // Tresillo: X..X..X. — a base do groove
+      for (const t of [0, 0.75, 1.5]) addDrumHit(data, sr, o + t, 58, 1, 0.16);
+      for (const t of [0.5, 1.25]) addDrumHit(data, sr, o + t, 84, 0.5, 0.2);
+      addDrumHit(data, sr, o + 1.75, 112, 0.4, 0.13);
+      for (let s = 0; s < 8; s++) {
+        addShakerTick(data, sr, o + s * 0.25, s % 2 === 0 ? 0.22 : 0.13);
+      }
+    } else {
+      // Bumbo de guerra + dobras
+      addDrumHit(data, sr, o, 42, 1.25, 0.35);
+      for (const t of [0.375, 1.125]) addDrumHit(data, sr, o + t, 58, 0.7, 0.14);
+      addDrumHit(data, sr, o + 1, 70, 0.8, 0.24);
+    }
+  }
+  if (heavy) {
+    // Virada de toms em semicolcheias fechando o ciclo
+    for (let k = 0; k < 8; k++) {
+      addDrumHit(data, sr, 3.5 + k * 0.0625, 95 - k * 4, 0.3 + k * 0.06, 0.09);
+    }
+  }
+
+  // Saturação leve para dar corpo
+  let peak = 0;
+  for (let i = 0; i < data.length; i++) {
+    data[i] = Math.tanh(data[i] * 1.4);
+    peak = Math.max(peak, Math.abs(data[i]));
+  }
+  if (peak > 0) for (let i = 0; i < data.length; i++) data[i] = (data[i] / peak) * 0.85;
+  return buffer;
+}
+
+/** Grilos de savana: vozes com padrões de trinado e pausas diferentes. */
+function makeCricketLoop(ctx: AudioContext) {
+  const duration = 8;
+  const sr = ctx.sampleRate;
+  const buffer = ctx.createBuffer(1, sr * duration, sr);
+  const data = buffer.getChannelData(0);
+
+  const voices = [
+    { freq: 4300, trill: 38, chirps: 4, gap: 0.9, offset: 0, amp: 0.5 },
+    { freq: 3700, trill: 31, chirps: 3, gap: 1.4, offset: 0.55, amp: 0.4 },
+    { freq: 5100, trill: 44, chirps: 5, gap: 1.1, offset: 1.2, amp: 0.3 },
+  ];
+
+  for (const v of voices) {
+    let t0 = v.offset;
+    while (t0 < duration) {
+      for (let c = 0; c < v.chirps; c++) {
+        const chirpStart = t0 + c * 0.085;
+        const len = Math.floor(0.055 * sr);
+        const start = Math.floor(chirpStart * sr);
+        for (let i = 0; i < len; i++) {
+          const t = i / sr;
+          const am = 0.5 - 0.5 * Math.cos(2 * Math.PI * v.trill * t);
+          const e = Math.sin((Math.PI * i) / len);
+          data[(start + i) % data.length] +=
+            Math.sin(2 * Math.PI * v.freq * t) * am * e * v.amp;
+        }
+      }
+      t0 += v.chirps * 0.085 + v.gap;
+    }
+  }
+
+  let peak = 0;
+  for (let i = 0; i < data.length; i++) peak = Math.max(peak, Math.abs(data[i]));
+  if (peak > 0) for (let i = 0; i < data.length; i++) data[i] = (data[i] / peak) * 0.7;
+  return buffer;
+}
+
 export class AudioManager {
   private listener: THREE.AudioListener | null = null;
   private buffers = new Map<SoundName, AudioBuffer>();
@@ -101,6 +232,9 @@ export class AudioManager {
   private lastPlayed = new Map<SoundName, number>();
   private ambient: THREE.Audio | null = null;
   private rumble: THREE.Audio | null = null;
+  private crickets: THREE.Audio | null = null;
+  private drums: THREE.Audio | null = null;
+  private drumsHeavy: THREE.Audio | null = null;
   private group: THREE.Group | null = null;
   ready = false;
 
@@ -122,27 +256,42 @@ export class AudioManager {
       this.pool.push(audio);
     }
 
-    // Ambiente: vento constante + rumor de multidão
-    const wind = makeBuffer(ctx, 4, () => Math.random() * 2 - 1);
-    lowpass(wind, 0.035);
-    this.ambient = new THREE.Audio(listener);
-    this.ambient.setBuffer(wind);
-    this.ambient.setLoop(true);
-    this.ambient.setVolume(0.16);
-    this.ambient.play();
+    // Ambiência em camadas: vento com rajadas + grilos de savana (menu),
+    // tambores tribais em duas intensidades (batalha)
+    const wind = makeBuffer(ctx, 8, (t) => {
+      const gust = 0.55 + 0.45 * Math.sin((2 * Math.PI * 2 * t) / 8 + 1.3);
+      return (Math.random() * 2 - 1) * gust;
+    });
+    lowpass(wind, 0.03);
+    crossfadeLoop(wind, 0.3);
+    this.ambient = this.makeLoop(listener, wind, 0.12);
+
+    this.crickets = this.makeLoop(listener, makeCricketLoop(ctx), 0.16);
+    this.drums = this.makeLoop(listener, makeDrumLoop(ctx, false), 0);
+    this.drumsHeavy = this.makeLoop(listener, makeDrumLoop(ctx, true), 0);
 
     const crowd = makeBuffer(ctx, 3.5, (t) => {
       const mod = 0.6 + 0.4 * Math.sin(t * 2.1) * Math.sin(t * 5.7);
       return (Math.random() * 2 - 1) * mod;
     });
     lowpass(crowd, 0.09);
-    this.rumble = new THREE.Audio(listener);
-    this.rumble.setBuffer(crowd);
-    this.rumble.setLoop(true);
-    this.rumble.setVolume(0);
-    this.rumble.play();
+    crossfadeLoop(crowd, 0.25);
+    this.rumble = this.makeLoop(listener, crowd, 0);
 
     this.ready = true;
+  }
+
+  private makeLoop(
+    listener: THREE.AudioListener,
+    buffer: AudioBuffer,
+    volume: number,
+  ) {
+    const audio = new THREE.Audio(listener);
+    audio.setBuffer(buffer);
+    audio.setLoop(true);
+    audio.setVolume(volume);
+    audio.play();
+    return audio;
   }
 
   private synthesize(ctx: AudioContext) {
@@ -360,9 +509,23 @@ export class AudioManager {
     }
   }
 
-  /** Rumor da multidão proporcional à quantidade de homens em movimento. */
-  setCrowdIntensity(intensity: number) {
-    this.rumble?.setVolume(Math.min(0.5, intensity * 0.5));
+  /**
+   * Mixagem da ambiência (chamada a cada frame): grilos no aguardo,
+   * tambores tribais crescendo com a intensidade da batalha.
+   */
+  updateAmbience(running: boolean, intensity: number) {
+    if (!this.ready) return;
+    const targets: [THREE.Audio | null, number][] = [
+      [this.crickets, running ? 0.05 : 0.16],
+      [this.drums, running ? 0.28 + intensity * 0.35 : 0],
+      [this.drumsHeavy, running ? Math.max(0, intensity - 0.3) * 0.75 : 0],
+      [this.rumble, running ? Math.min(0.22, intensity * 0.25) : 0],
+    ];
+    for (const [audio, target] of targets) {
+      if (!audio) continue;
+      const current = audio.getVolume();
+      audio.setVolume(current + (target - current) * 0.045);
+    }
   }
 
   setMuted(muted: boolean) {

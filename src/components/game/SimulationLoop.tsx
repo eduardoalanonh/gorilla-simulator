@@ -165,9 +165,7 @@ export function SimulationLoop() {
 
     fx.pool?.update(dt * speedFactor);
     fx.numbers?.update(dt * speedFactor);
-    audioManager.setCrowdIntensity(
-      sim.running ? Math.min(1, sim.aliveCount / 220) : 0,
-    );
+    audioManager.updateAmbience(sim.running, Math.min(1, sim.aliveCount / 220));
 
     // Fim de batalha (com pequeno delay cinematográfico)
     if (store.phase === "running") {
