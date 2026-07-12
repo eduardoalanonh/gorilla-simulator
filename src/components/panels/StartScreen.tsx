@@ -28,12 +28,12 @@ export function StartScreen() {
           initial={{ scale: 0, rotate: -20 }}
           animate={{ scale: 1, rotate: 0 }}
           transition={{ type: "spring", stiffness: 160, damping: 12, delay: 0.15 }}
-          className="mb-2 text-7xl drop-shadow-[0_0_28px_rgba(255,140,60,0.45)]"
+          className="mb-2 text-6xl drop-shadow-[0_0_28px_rgba(255,140,60,0.45)] sm:text-7xl"
         >
           🦍
         </motion.span>
 
-        <h1 className="font-display text-6xl tracking-tight text-amber-100 sm:text-8xl [text-shadow:0_2px_0_rgba(120,50,10,0.9),0_6px_24px_rgba(255,120,40,0.45)]">
+        <h1 className="font-display text-5xl tracking-tight text-amber-100 sm:text-7xl lg:text-8xl [text-shadow:0_2px_0_rgba(120,50,10,0.9),0_6px_24px_rgba(255,120,40,0.45)]">
           GORILLA SIMULATOR
         </h1>
 

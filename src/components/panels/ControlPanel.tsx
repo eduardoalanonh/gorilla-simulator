@@ -1,6 +1,6 @@
 "use client";
 
-import { motion } from "framer-motion";
+import { useEffect, useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Slider } from "@/components/ui/slider";
 import { Checkbox } from "@/components/ui/checkbox";
@@ -25,14 +25,45 @@ import { cn } from "@/lib/utils";
 export function ControlPanel() {
   const s = useSimulationStore();
   const running = s.phase === "running";
+  // No mobile o painel vira bottom sheet — fechado por padrão
+  const [open, setOpen] = useState(false);
+
+  // Batalha começou: recolhe o sheet para liberar a visão
+  useEffect(() => {
+    if (running) setOpen(false);
+  }, [running]);
 
   return (
-    <motion.aside
-      initial={{ x: 340, opacity: 0 }}
-      animate={{ x: 0, opacity: 1 }}
-      transition={{ type: "spring", stiffness: 120, damping: 18 }}
-      className="fixed right-4 top-4 bottom-4 z-30 flex w-[300px] flex-col gap-4 overflow-y-auto rounded-2xl border border-white/10 bg-black/55 p-5 backdrop-blur-xl"
-    >
+    <>
+      {/* Botão flutuante de config (só mobile) */}
+      <button
+        onClick={() => setOpen((v) => !v)}
+        aria-label={open ? "Fechar configurações" : "Abrir configurações"}
+        className="fixed bottom-[max(1rem,env(safe-area-inset-bottom))] right-4 z-40 flex h-12 w-12 items-center justify-center rounded-full border border-white/15 bg-black/70 text-xl backdrop-blur-md transition-transform active:scale-90 md:hidden"
+      >
+        {open ? "✕" : "⚙️"}
+      </button>
+
+      {/* Start flutuante no mobile quando o sheet está fechado */}
+      {s.phase === "ready" && !open && (
+        <Button
+          onClick={s.startBattle}
+          className="fixed bottom-[max(1rem,env(safe-area-inset-bottom))] left-1/2 z-40 h-12 -translate-x-1/2 rounded-full bg-gradient-to-r from-orange-500 to-red-600 px-6 font-bold text-white shadow-[0_6px_28px_rgba(255,90,30,0.45)] md:hidden"
+        >
+          ▶ Start Simulation
+        </Button>
+      )}
+
+      <aside
+        className={cn(
+          "fixed z-30 flex flex-col gap-4 overflow-y-auto rounded-2xl border border-white/10 bg-black/55 p-5 backdrop-blur-xl",
+          // Mobile: bottom sheet deslizante
+          "max-md:inset-x-2 max-md:bottom-2 max-md:max-h-[72dvh] max-md:pb-[max(1.25rem,env(safe-area-inset-bottom))] max-md:transition-transform max-md:duration-300 max-md:ease-out",
+          !open && "max-md:translate-y-[calc(100%+1rem)]",
+          // Desktop: painel lateral fixo
+          "md:bottom-4 md:right-4 md:top-4 md:w-[300px] md:animate-in md:fade-in md:slide-in-from-right-8 md:duration-500",
+        )}
+      >
       <div>
         <h2 className="font-display text-xl text-amber-100">Simulação</h2>
         <p className="text-xs text-zinc-400">Configure e solte o caos</p>
@@ -229,7 +260,8 @@ export function ControlPanel() {
         />
       </div>
 
-    </motion.aside>
+      </aside>
+    </>
   );
 }
 

@@ -60,7 +60,7 @@ export function EndScreen() {
         initial={{ scale: 0.85, opacity: 0, y: 30 }}
         animate={{ scale: 1, opacity: 1, y: 0 }}
         transition={{ type: "spring", stiffness: 160, damping: 16, delay: 0.15 }}
-        className="relative w-full max-w-md rounded-3xl border border-white/12 bg-zinc-950/90 p-8 shadow-[0_20px_80px_rgba(0,0,0,0.7)]"
+        className="relative max-h-[92dvh] w-full max-w-md overflow-y-auto rounded-3xl border border-white/12 bg-zinc-950/90 p-5 shadow-[0_20px_80px_rgba(0,0,0,0.7)] sm:p-8"
       >
         <motion.div
           initial={{ scale: 0 }}

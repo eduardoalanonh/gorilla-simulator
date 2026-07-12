@@ -32,11 +32,11 @@ export function HUD() {
 
   return (
     <>
-      {/* Barra de vida do gorila — topo centro */}
+      {/* Barra de vida do gorila — topo centro (full-width no mobile) */}
       <motion.div
-        initial={{ y: -60, opacity: 0 }}
-        animate={{ y: 0, opacity: 1 }}
-        className="pointer-events-none fixed left-1/2 top-4 z-30 w-[min(420px,42vw)] -translate-x-1/2"
+        initial={{ opacity: 0 }}
+        animate={{ opacity: 1 }}
+        className="pointer-events-none fixed z-30 max-md:inset-x-2 max-md:top-2 md:left-1/2 md:top-4 md:w-[min(420px,42vw)] md:-translate-x-1/2"
       >
         <div className="mb-1 flex items-center justify-between text-xs font-semibold">
           <span className={hpFrac <= 0.25 && gorillaHp > 0 ? "text-red-400" : "text-amber-200"}>
@@ -61,11 +61,11 @@ export function HUD() {
         </div>
       </motion.div>
 
-      {/* Stats — topo esquerda */}
+      {/* Stats — topo esquerda (abaixo da barra de HP no mobile) */}
       <motion.div
-        initial={{ x: -60, opacity: 0 }}
-        animate={{ x: 0, opacity: 1 }}
-        className="pointer-events-none fixed left-4 top-4 z-30 flex flex-col gap-1.5"
+        initial={{ opacity: 0 }}
+        animate={{ opacity: 1 }}
+        className="pointer-events-none fixed z-30 flex flex-col max-md:left-2 max-md:top-14 max-md:gap-1 md:left-4 md:top-4 md:gap-1.5"
       >
         <StatChip label="Vivos" value={aliveMen} accent="text-sky-300" />
         <StatChip
@@ -80,22 +80,29 @@ export function HUD() {
 
       {/* Modos de câmera — canto inferior esquerdo */}
       <motion.div
-        initial={{ y: 60, opacity: 0 }}
-        animate={{ y: 0, opacity: 1 }}
-        className="fixed bottom-4 left-4 z-30 flex gap-1 rounded-xl border border-white/10 bg-black/55 p-1 backdrop-blur-md"
+        initial={{ opacity: 0 }}
+        animate={{ opacity: 1 }}
+        className={cn(
+          "fixed z-30 flex gap-1 rounded-xl border border-white/10 bg-black/55 p-1 backdrop-blur-md max-md:left-2 md:bottom-4 md:left-4",
+          // No mobile, sobe para não colidir com o botão Start flutuante
+          phase === "ready"
+            ? "max-md:bottom-[max(4.25rem,calc(env(safe-area-inset-bottom)+3.75rem))]"
+            : "max-md:bottom-[max(0.5rem,env(safe-area-inset-bottom))]",
+        )}
       >
         {CAMERA_MODES.map((m) => (
           <button
             key={m.id}
             onClick={() => setCameraMode(m.id)}
             className={cn(
-              "rounded-lg px-3 py-1.5 text-xs font-medium transition-colors",
+              "rounded-lg font-medium transition-colors max-md:px-2 max-md:py-1 max-md:text-[10px] md:px-3 md:py-1.5 md:text-xs",
               cameraMode === m.id
                 ? "bg-orange-500/30 text-orange-200"
                 : "text-zinc-400 hover:bg-white/10 hover:text-zinc-200",
             )}
           >
-            📷 {m.label}
+            <span className="max-md:hidden">📷 </span>
+            {m.label}
           </button>
         ))}
       </motion.div>
@@ -107,7 +114,7 @@ export function HUD() {
           initial={{ opacity: 0 }}
           animate={{ opacity: 1 }}
           transition={{ delay: 0.4 }}
-          className="pointer-events-none fixed bottom-5 left-1/2 z-30 -translate-x-1/2 rounded-full border border-white/10 bg-black/50 px-4 py-1.5 text-xs text-zinc-300 backdrop-blur"
+          className="pointer-events-none fixed bottom-5 left-1/2 z-30 hidden -translate-x-1/2 rounded-full border border-white/10 bg-black/50 px-4 py-1.5 text-xs text-zinc-300 backdrop-blur md:block"
         >
           Arraste para orbitar · scroll para zoom · clique em{" "}
           <span className="font-semibold text-orange-300">Start Simulation</span>
@@ -154,8 +161,8 @@ function KillStreakPopup() {
               className={cn(
                 "font-display tracking-wide",
                 big
-                  ? "text-5xl text-red-400 [text-shadow:0_2px_0_rgba(80,10,10,0.9),0_6px_28px_rgba(255,60,30,0.6)]"
-                  : "text-4xl text-amber-300 [text-shadow:0_2px_0_rgba(90,50,5,0.9),0_5px_20px_rgba(255,150,40,0.5)]",
+                  ? "text-4xl sm:text-5xl text-red-400 [text-shadow:0_2px_0_rgba(80,10,10,0.9),0_6px_28px_rgba(255,60,30,0.6)]"
+                  : "text-3xl sm:text-4xl text-amber-300 [text-shadow:0_2px_0_rgba(90,50,5,0.9),0_5px_20px_rgba(255,150,40,0.5)]",
               )}
             >
               {visible.label}
@@ -180,11 +187,11 @@ function StatChip({
   accent: string;
 }) {
   return (
-    <div className="flex min-w-[132px] items-center justify-between rounded-lg border border-white/10 bg-black/55 px-3 py-1.5 backdrop-blur-md">
-      <span className="text-[11px] uppercase tracking-wide text-zinc-500">
+    <div className="flex items-center justify-between rounded-lg border border-white/10 bg-black/55 backdrop-blur-md max-md:min-w-[104px] max-md:gap-2 max-md:px-2 max-md:py-1 md:min-w-[132px] md:px-3 md:py-1.5">
+      <span className="uppercase tracking-wide text-zinc-500 max-md:text-[9px] md:text-[11px]">
         {label}
       </span>
-      <span className={cn("font-mono text-sm font-bold", accent)}>
+      <span className={cn("font-mono font-bold max-md:text-xs md:text-sm", accent)}>
         {typeof value === "number" ? value.toLocaleString("pt-BR") : value}
       </span>
     </div>

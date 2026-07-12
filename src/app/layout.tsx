@@ -1,4 +1,4 @@
-import type { Metadata } from "next";
+import type { Metadata, Viewport } from "next";
 import { Anton, Geist, Geist_Mono } from "next/font/google";
 import "./globals.css";
 
@@ -24,6 +24,15 @@ export const metadata: Metadata = {
     "Quantos homens são necessários para derrotar um gorila? Simule a batalha em 3D, com física em tempo real, direto no navegador.",
 };
 
+export const viewport: Viewport = {
+  width: "device-width",
+  initialScale: 1,
+  maximumScale: 1,
+  // Pinch-zoom da página brigaria com os gestos da câmera 3D
+  userScalable: false,
+  themeColor: "#0c0a14",
+};
+
 export default function RootLayout({
   children,
 }: Readonly<{
@@ -32,7 +41,7 @@ export default function RootLayout({
   return (
     <html lang="pt-BR" className="dark">
       <body
-        className={`${geistSans.variable} ${geistMono.variable} ${anton.variable} overflow-hidden bg-black antialiased`}
+        className={`${geistSans.variable} ${geistMono.variable} ${anton.variable} overflow-hidden overscroll-none bg-black antialiased`}
       >
         {children}
       </body>

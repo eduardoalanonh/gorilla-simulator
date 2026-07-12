@@ -19,15 +19,20 @@ import { Effects } from "./Effects";
 
 export function GameCanvas() {
   const showColliders = useSimulationStore((s) => s.showColliders);
+  // GPUs de celular: limita o devicePixelRatio para manter 60 fps
+  const isTouch =
+    typeof window !== "undefined" &&
+    window.matchMedia("(pointer: coarse)").matches;
 
   return (
     <Canvas
       flat
       shadows
-      dpr={[1, 1.6]}
+      dpr={isTouch ? [1, 1.3] : [1, 1.6]}
       gl={{ antialias: false, powerPreference: "high-performance" }}
       camera={{ position: [22, 13, 26], fov: 42, near: 0.5, far: 700 }}
       className="!fixed inset-0"
+      style={{ touchAction: "none" }}
     >
       <color attach="background" args={["#0c0a14"]} />
       <fogExp2 attach="fog" args={["#1c1425", 0.0062]} />
