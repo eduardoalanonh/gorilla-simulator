@@ -26,7 +26,9 @@ export function HUD() {
   const cameraMode = useSimulationStore((s) => s.cameraMode);
   const setCameraMode = useSimulationStore((s) => s.setCameraMode);
   const phase = useSimulationStore((s) => s.phase);
-  const hordeMode = useSimulationStore((s) => s.hordeMode);
+  const battleMode = useSimulationStore((s) => s.battleMode);
+  const followedLabel = useSimulationStore((s) => s.followedLabel);
+  const followedNecro = useSimulationStore((s) => s.followedNecro);
 
   const hpFrac = gorillaMaxHp > 0 ? gorillaHp / gorillaMaxHp : 0;
 
@@ -69,9 +71,9 @@ export function HUD() {
       >
         <StatChip label="Vivos" value={aliveMen} accent="text-sky-300" />
         <StatChip
-          label={hordeMode ? "Score 🦍" : "Mortos"}
+          label={battleMode !== "classic" ? "Score 🦍" : "Mortos"}
           value={deadMen}
-          accent={hordeMode ? "text-amber-300" : "text-red-400"}
+          accent={battleMode !== "classic" ? "text-amber-300" : "text-red-400"}
         />
         <StatChip label="Tempo" value={formatTime(elapsed)} accent="text-amber-200" />
         <StatChip label="FPS" value={fps} accent={fps < 30 ? "text-red-400" : "text-emerald-300"} />
@@ -108,6 +110,23 @@ export function HUD() {
       </motion.div>
 
       <KillStreakPopup />
+      <WavePopup />
+
+      {/* Identidade do homem seguido pela câmera */}
+      {cameraMode === "man" && (followedLabel || followedNecro) && (
+        <div className="pointer-events-none fixed bottom-16 left-1/2 z-30 -translate-x-1/2 max-md:bottom-24">
+          <div
+            className={cn(
+              "rounded-full border px-4 py-1.5 text-sm backdrop-blur-md",
+              followedNecro
+                ? "border-red-400/30 bg-black/70 text-red-200"
+                : "border-white/15 bg-black/60 text-zinc-200",
+            )}
+          >
+            {followedNecro ?? followedLabel}
+          </div>
+        </div>
+      )}
 
       {phase === "ready" && (
         <motion.p
@@ -171,6 +190,38 @@ function KillStreakPopup() {
               {visible.count} de uma vez
             </span>
           </motion.div>
+        )}
+      </AnimatePresence>
+    </div>
+  );
+}
+
+/** Popup "🌊 ONDA N" no modo ondas. */
+function WavePopup() {
+  const wave = useSimulationStore((s) => s.wave);
+  const [visible, setVisible] = useState<{ n: number; id: number } | null>(null);
+
+  useEffect(() => {
+    if (!wave) return;
+    setVisible(wave);
+    const t = setTimeout(() => setVisible(null), 1800);
+    return () => clearTimeout(t);
+  }, [wave]);
+
+  return (
+    <div className="pointer-events-none fixed left-1/2 top-[18%] z-30 -translate-x-1/2">
+      <AnimatePresence mode="popLayout">
+        {visible && (
+          <motion.span
+            key={visible.id}
+            initial={{ scale: 0.4, opacity: 0, y: -20 }}
+            animate={{ scale: 1, opacity: 1, y: 0 }}
+            exit={{ scale: 1.15, opacity: 0 }}
+            transition={{ type: "spring", stiffness: 260, damping: 18 }}
+            className="font-display text-4xl tracking-wide text-sky-300 [text-shadow:0_2px_0_rgba(10,40,80,0.9),0_5px_20px_rgba(60,160,255,0.5)] sm:text-5xl"
+          >
+            🌊 ONDA {visible.n}
+          </motion.span>
         )}
       </AnimatePresence>
     </div>

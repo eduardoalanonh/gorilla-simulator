@@ -9,6 +9,7 @@ import {
   SPEED_OPTIONS,
 } from "@/constants/config";
 import type {
+  BattleMode,
   BattleResults,
   CameraMode,
   Phase,
@@ -24,7 +25,28 @@ interface RuntimeStats {
   elapsed: number;
   fps: number;
   entityCount: number;
+  /** Legenda do homem seguido pela câmera ("Cleiton, 34 — achou que dava") */
+  followedLabel: string | null;
+  /** Necrológio recente do homem seguido */
+  followedNecro: string | null;
 }
+
+/** Laboratório: multiplicadores livres por cima dos modificadores. */
+export interface LabConfig {
+  menHp: number;
+  menDmg: number;
+  gorHp: number;
+  gorDmg: number;
+}
+
+/** Mutadores globais de física/escala. */
+export interface Mutators {
+  lowGravity: boolean;
+  ice: boolean;
+  giants: boolean;
+}
+
+const LAB_DEFAULT: LabConfig = { menHp: 1, menDmg: 1, gorHp: 1, gorDmg: 1 };
 
 interface SimulationStore extends RuntimeStats {
   phase: Phase;
@@ -33,7 +55,9 @@ interface SimulationStore extends RuntimeStats {
 
   /** Popup de kill streak (id força re-animação) */
   streak: { count: number; id: number } | null;
-  hordeMode: boolean;
+  /** Popup de onda ("ONDA 3") */
+  wave: { n: number; id: number } | null;
+  battleMode: BattleMode;
 
   menCount: number;
   speed: (typeof SPEED_OPTIONS)[number];
@@ -43,10 +67,22 @@ interface SimulationStore extends RuntimeStats {
   showColliders: boolean;
   postFx: boolean;
   muted: boolean;
+  /** Física exagerada + som de mola quando alguém decola */
+  cartoonMode: boolean;
+  /** Raios e vacas caindo do céu */
+  arenaEvents: boolean;
   menModifierId: string;
   gorillaModifierId: string;
   arenaId: string;
   cameraMode: CameraMode;
+
+  lab: LabConfig;
+  mutators: Mutators;
+
+  /** Palpite pré-batalha + placar da sessão */
+  guess: Winner;
+  guessRight: number;
+  guessTotal: number;
 
   results: BattleResults | null;
 
@@ -61,8 +97,12 @@ interface SimulationStore extends RuntimeStats {
   setMenModifier: (id: string) => void;
   setGorillaModifier: (id: string) => void;
   setArena: (id: string) => void;
-  toggleHorde: () => void;
+  setBattleMode: (m: BattleMode) => void;
+  setGuess: (g: Winner) => void;
+  setLab: (patch: Partial<LabConfig>) => void;
+  toggleMutator: (key: keyof Mutators) => void;
   announceStreak: (count: number) => void;
+  announceWave: (n: number) => void;
   toggle: (
     key:
       | "slowMotion"
@@ -70,17 +110,24 @@ interface SimulationStore extends RuntimeStats {
       | "debugMode"
       | "showColliders"
       | "postFx"
-      | "muted",
+      | "muted"
+      | "cartoonMode"
+      | "arenaEvents",
   ) => void;
   syncRuntime: (r: Partial<RuntimeStats>) => void;
 }
+
+/** Bump do runId apenas quando dá para re-spawnar (fase ready). */
+const bump = (s: { phase: Phase; runId: number }) =>
+  s.phase === "ready" ? s.runId + 1 : s.runId;
 
 export const useSimulationStore = create<SimulationStore>()((set, get) => ({
   phase: "intro",
   runId: 0,
 
   streak: null,
-  hordeMode: false,
+  wave: null,
+  battleMode: "classic",
 
   menCount: 100,
   speed: 1,
@@ -90,18 +137,29 @@ export const useSimulationStore = create<SimulationStore>()((set, get) => ({
   showColliders: false,
   postFx: true,
   muted: false,
+  cartoonMode: false,
+  arenaEvents: true,
   menModifierId: "comuns",
   gorillaModifierId: "normal",
   arenaId: "coliseu",
   cameraMode: "free",
 
+  lab: { ...LAB_DEFAULT },
+  mutators: { lowGravity: false, ice: false, giants: false },
+
+  guess: null,
+  guessRight: 0,
+  guessTotal: 0,
+
   aliveMen: 0,
   deadMen: 0,
-  gorillaHp: 10000,
-  gorillaMaxHp: 10000,
+  gorillaHp: 15000,
+  gorillaMaxHp: 15000,
   elapsed: 0,
   fps: 0,
   entityCount: 0,
+  followedLabel: null,
+  followedNecro: null,
 
   results: null,
 
@@ -119,6 +177,8 @@ export const useSimulationStore = create<SimulationStore>()((set, get) => ({
       results: null,
       elapsed: 0,
       streak: null,
+      wave: null,
+      guess: null,
     })),
 
   randomize: () =>
@@ -130,38 +190,43 @@ export const useSimulationStore = create<SimulationStore>()((set, get) => ({
       runId: s.phase === "ready" ? s.runId : s.runId + 1,
       phase: "ready",
       results: null,
+      guess: null,
     })),
 
-  finish: (winner, results) => set({ phase: "ended", results }),
+  finish: (winner, results) =>
+    set((s) => {
+      const guessed = s.guess !== null && s.battleMode === "classic";
+      return {
+        phase: "ended",
+        results,
+        guessTotal: guessed ? s.guessTotal + 1 : s.guessTotal,
+        guessRight:
+          guessed && s.guess === winner ? s.guessRight + 1 : s.guessRight,
+      };
+    }),
 
   setMenCount: (n) => set({ menCount: n }),
   setSpeed: (speed) => set({ speed }),
   setCameraMode: (cameraMode) => set({ cameraMode }),
   setMenModifier: (menModifierId) =>
-    set((s) => ({
-      menModifierId,
-      runId: s.phase === "ready" ? s.runId + 1 : s.runId,
-    })),
+    set((s) => ({ menModifierId, runId: bump(s) })),
   setGorillaModifier: (gorillaModifierId) =>
+    set((s) => ({ gorillaModifierId, runId: bump(s) })),
+  setArena: (arenaId) => set((s) => ({ arenaId, runId: bump(s) })),
+  setBattleMode: (battleMode) => set((s) => ({ battleMode, runId: bump(s) })),
+  setGuess: (guess) => set({ guess }),
+  setLab: (patch) =>
+    set((s) => ({ lab: { ...s.lab, ...patch }, runId: bump(s) })),
+  toggleMutator: (key) =>
     set((s) => ({
-      gorillaModifierId,
-      runId: s.phase === "ready" ? s.runId + 1 : s.runId,
-    })),
-
-  setArena: (arenaId) =>
-    set((s) => ({
-      arenaId,
-      runId: s.phase === "ready" ? s.runId + 1 : s.runId,
-    })),
-
-  toggleHorde: () =>
-    set((s) => ({
-      hordeMode: !s.hordeMode,
-      runId: s.phase === "ready" ? s.runId + 1 : s.runId,
+      mutators: { ...s.mutators, [key]: !s.mutators[key] },
+      runId: bump(s),
     })),
 
   announceStreak: (count) =>
     set((s) => ({ streak: { count, id: (s.streak?.id ?? 0) + 1 } })),
+
+  announceWave: (n) => set((s) => ({ wave: { n, id: (s.wave?.id ?? 0) + 1 } })),
 
   toggle: (key) => set((s) => ({ [key]: !s[key] }) as Partial<SimulationStore>),
 

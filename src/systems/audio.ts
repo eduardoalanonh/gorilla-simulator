@@ -23,6 +23,12 @@ type SoundName =
   | "beamFire"
   | "bow"
   | "fireball"
+  | "quack"
+  | "screech"
+  | "moo"
+  | "squeak"
+  | "whistle"
+  | "thunder"
   | "gorillaStep"
   | "gorillaDie";
 
@@ -37,7 +43,12 @@ export type VoiceName =
   | "winner"
   | "you_win"
   | "game_over"
-  | "prepare_yourself";
+  | "prepare_yourself"
+  | "round_1"
+  | "round_2"
+  | "round_3"
+  | "round_4"
+  | "round_5";
 
 const VOICE_NAMES: VoiceName[] = [
   "fight",
@@ -50,6 +61,11 @@ const VOICE_NAMES: VoiceName[] = [
   "you_win",
   "game_over",
   "prepare_yourself",
+  "round_1",
+  "round_2",
+  "round_3",
+  "round_4",
+  "round_5",
 ];
 
 const POOL_SIZE = 18;
@@ -510,6 +526,81 @@ export class AudioManager {
     lowpass(beamFire, 0.28);
     b.set("beamFire", beamFire);
 
+    // QUACK gigante (pato do tamanho de um cavalo)
+    const quack = makeBuffer(ctx, 0.55, (t) => {
+      const f = (140 - t * 40) * (1 + 0.12 * Math.sin(2 * Math.PI * 22 * t));
+      const saw = 2 * ((t * f) % 1) - 1;
+      const e = env(t, 0.02, 0.22) * (t < 0.45 ? 1 : (0.55 - t) / 0.1);
+      return Math.tanh(saw * 3) * Math.max(e, 0);
+    });
+    applyFormants(quack, [
+      [620, 3, 1],
+      [1300, 4, 0.9],
+      [2500, 6, 0.4],
+    ]);
+    b.set("quack", quack);
+
+    // Guincho de dinossauro
+    const screech = makeBuffer(ctx, 1.3, (t) => {
+      const f = (900 - t * 500) * (1 + 0.06 * Math.sin(2 * Math.PI * 9 * t));
+      const saw = 2 * ((t * f) % 1) - 1;
+      const growl = 0.6 + 0.4 * Math.sin(2 * Math.PI * 34 * t);
+      const e = env(t, 0.05, 0.5);
+      return Math.tanh(saw * growl * 2.2) * e;
+    });
+    applyFormants(screech, [
+      [1100, 4, 1],
+      [2400, 5, 0.7],
+      [500, 4, 0.5],
+    ]);
+    b.set("screech", screech);
+
+    // Mugido bravo
+    const moo = makeBuffer(ctx, 1.1, (t) => {
+      const f = (95 - t * 25) * (1 + 0.05 * Math.sin(2 * Math.PI * 6 * t));
+      let s = 0;
+      for (let k = 1; k <= 5; k++) s += Math.sin(2 * Math.PI * f * k * t) / k;
+      const e = env(t, 0.08, 0.45);
+      return Math.tanh(s * 1.8) * e;
+    });
+    applyFormants(moo, [
+      [320, 3, 1],
+      [700, 4, 0.7],
+    ]);
+    b.set("moo", moo);
+
+    // Frango de borracha
+    b.set(
+      "squeak",
+      makeBuffer(ctx, 0.28, (t) => {
+        const f = 900 + Math.sin(2 * Math.PI * 18 * t) * 250 - t * 600;
+        const e = env(t, 0.01, 0.1);
+        return Math.tanh(Math.sin(2 * Math.PI * f * t) * 2.5) * e;
+      }),
+    );
+
+    // Apito de mola (alguém decolou)
+    b.set(
+      "whistle",
+      makeBuffer(ctx, 0.8, (t) => {
+        const k = t / 0.8;
+        const f = 550 + Math.sin(Math.PI * k) * 900;
+        const vib = 1 + 0.02 * Math.sin(2 * Math.PI * 24 * t);
+        const e = env(t, 0.03, 0.5) * (t < 0.65 ? 1 : (0.8 - t) / 0.15);
+        return Math.sin(2 * Math.PI * f * vib * t) * Math.max(e, 0) * 0.8;
+      }),
+    );
+
+    // Trovão
+    const thunder = makeBuffer(ctx, 1.6, (t) => {
+      const crack = (Math.random() * 2 - 1) * env(t, 0.002, 0.05) * 1.5;
+      const rumble =
+        (Math.random() * 2 - 1) * env(t, 0.05, 0.7) * (0.6 + 0.4 * Math.sin(t * 9));
+      return crack + rumble;
+    });
+    lowpass(thunder, 0.16);
+    b.set("thunder", thunder);
+
     // Arco: "twang" da corda + zunido da flecha
     b.set(
       "bow",
@@ -647,8 +738,26 @@ export class AudioManager {
       case "land":
         this.play("thud", e.x, e.y, e.z, 0.4 * e.power, 0.3, 0.1);
         break;
-      case "roar":
-        this.play("roar", e.x, e.y, e.z, 1.4, 0.06, 1);
+      case "roar": {
+        const cry: SoundName =
+          e.cry === "quack" || e.cry === "screech" || e.cry === "moo"
+            ? e.cry
+            : "roar";
+        this.play(cry, e.x, e.y, e.z, 1.4, 0.06, 0.6);
+        break;
+      }
+      case "squeak":
+        this.play("squeak", e.x, e.y, e.z, 0.55, 0.35, 0.06);
+        break;
+      case "whistle":
+        this.play("whistle", e.x, e.y, e.z, 0.5, 0.2, 0.3);
+        break;
+      case "lightning":
+        this.play("thunder", e.x, e.y, e.z, 1.3, 0.1, 0.5);
+        break;
+      case "cowLand":
+        this.play("slam", e.x, e.y, e.z, 1.1, 0.15, 0.3);
+        this.play("moo", e.x, e.y + 1, e.z, 0.9, 0.2, 0.1);
         break;
       case "beamCharge":
         this.play("beamCharge", e.x, e.y, e.z, 0.9, 0.05, 0.5);

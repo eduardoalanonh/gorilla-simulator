@@ -42,6 +42,10 @@ export interface EffectEvent {
     | "beam"
     | "shoot"
     | "fireShoot"
+    | "squeak"
+    | "whistle"
+    | "lightning"
+    | "cowLand"
     | "gorillaStep"
     | "gorillaDie";
   x: number;
@@ -52,6 +56,8 @@ export interface EffectEvent {
   crit?: boolean;
   /** Quem causou o dano (cor do número flutuante) */
   source?: "gorilla" | "men";
+  /** Som do grito do monstro (roar/screech/quack/moo) */
+  cry?: string;
 }
 
 /** Amostra da linha do tempo da batalha (para o gráfico final). */
@@ -61,13 +67,30 @@ export interface HistorySample {
   gorillaHp: number;
 }
 
-export type BattleMode = "classic" | "horde";
+export type BattleMode = "classic" | "horde" | "waves";
+
+/** Estatísticas absurdas para a tela final. */
+export interface FunStats {
+  /** Distância total voada pelos homens (m) */
+  totalFlight: number;
+  /** Maior arremesso: distância e identidade */
+  maxFlight: number;
+  maxFlightIndex: number;
+  /** Primeiro a hesitar/fugir */
+  firstFleeIndex: number;
+  firstFleeAt: number;
+}
 
 export interface BattleResults {
   winner: Winner;
   mode: BattleMode;
   history: HistorySample[];
   durationSec: number;
+  fun: FunStats;
+  /** Ondas sobrevividas (modo ondas) */
+  waves: number;
+  /** Seed dos nomes (identidades cômicas) */
+  namesSeed: number;
   initialMen: number;
   survivors: number;
   deaths: number;

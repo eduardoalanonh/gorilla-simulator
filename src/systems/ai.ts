@@ -65,10 +65,21 @@ export function updateMen(sim: Simulation, dt: number) {
 
     // Aterrissagem após ser arremessado
     if (sim.airborne[i]) {
+      // Distância voada (estatística de fim de batalha)
+      const flightStep =
+        Math.sqrt(sim.velX[i] ** 2 + sim.velZ[i] ** 2) * dt;
+      sim.flightDist[i] += flightStep;
+      sim.totalFlight += flightStep;
+
       const grounded =
         sim.posY[i] < PHYSICS.manRadius + 0.12 && Math.abs(sim.velY[i]) < 1;
       if (grounded) {
         sim.airborne[i] = 0;
+        if (sim.flightDist[i] > sim.maxFlight) {
+          sim.maxFlight = sim.flightDist[i];
+          sim.maxFlightIndex = i;
+        }
+        sim.flightDist[i] = 0;
         const hSpeed = Math.sqrt(sim.velX[i] ** 2 + sim.velZ[i] ** 2);
         if (hSpeed > 3) sim.emit("land", sim.posX[i], 0.1, sim.posZ[i], hSpeed / 8);
         sim.state[i] = EntityState.Recovering;
@@ -340,8 +351,14 @@ export function updateGorilla(sim: Simulation, dt: number) {
     g.action = "beam";
     g.actionT = 0;
     g.state = EntityState.Attacking;
-    const mouthY = pos.y + sim.gorillaRadius * 0.9;
-    sim.emit("beamCharge", pos.x, mouthY, pos.z, 1);
+    // Touro não carrega energia — bufa e pateia o chão
+    if (sim.gorillaVariant.beamStyle === "charge") {
+      sim.emit("roar", pos.x, pos.y, pos.z, 1, { cry: "moo" });
+      sim.emit("gorillaStep", pos.x, 0.1, pos.z, 1.5);
+    } else {
+      const mouthY = pos.y + sim.gorillaRadius * 0.9;
+      sim.emit("beamCharge", pos.x, mouthY, pos.z, 1);
+    }
     return;
   }
 
@@ -493,7 +510,12 @@ function applyBeam(sim: Simulation, gx: number, gz: number) {
   }
 
   const mouthY = sim.gorillaRadius * 1.2;
-  sim.emit("beam", gx, mouthY, gz, 2);
+  if (sim.gorillaVariant.beamStyle === "charge") {
+    // Investida: estrondo de cascos em vez de raio de energia
+    sim.emit("slam", gx, 0.3, gz, 1.6);
+  } else {
+    sim.emit("beam", gx, mouthY, gz, 2);
+  }
   // Impactos no chão ao longo do corredor
   for (let k = 1; k <= 5; k++) {
     const d = start + (k / 5) * (length - start);
@@ -501,9 +523,9 @@ function applyBeam(sim: Simulation, gx: number, gz: number) {
   }
 }
 
-/** Rugido: medo + empurrão leve nos homens próximos. */
+/** Rugido (ou grasnado, ou mugido): medo + empurrão leve nos homens próximos. */
 function applyRoar(sim: Simulation, gx: number, gz: number) {
-  sim.emit("roar", gx, 1.8, gz, 2);
+  sim.emit("roar", gx, 1.8, gz, 2, { cry: sim.gorillaVariant.cry });
   sim.grid.forEachInRadius(gx, gz, AI.roarFearRadius, (j) => {
     if (sim.state[j] === EntityState.Dead) return;
     const ox = sim.posX[j] - gx;
@@ -513,6 +535,7 @@ function applyRoar(sim: Simulation, gx: number, gz: number) {
     if (!sim.manFearless && Math.random() < 0.55) {
       sim.fearTimer[j] = 0.8 + Math.random() * 2.2;
       sim.state[j] = EntityState.Recovering;
+      sim.noteFlee(j);
     }
     const body = sim.bodies[j];
     if (body && d < 6) {

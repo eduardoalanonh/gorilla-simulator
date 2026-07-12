@@ -22,6 +22,7 @@ export function CameraRig() {
   const mode = useSimulationStore((s) => s.cameraMode);
   const phase = useSimulationStore((s) => s.phase);
   const followIndex = useRef(-1);
+  const deadLinger = useRef(0);
 
   // Novo alvo aleatório ao entrar no modo "seguir homem"
   useEffect(() => {
@@ -52,10 +53,17 @@ export function CameraRig() {
       moveTargetKeepingOffset(controls, camera, _target, lerpK);
     } else if (mode === "man") {
       let i = followIndex.current;
-      if (i < 0 || i >= sim.count || sim.state[i] === EntityState.Dead) {
+      const dead = i >= 0 && i < sim.count && sim.state[i] === EntityState.Dead;
+      if (dead) {
+        // Momento de respeito: fica no corpo por 2.2s (tempo do necrológio)
+        deadLinger.current += delta;
+      }
+      if (i < 0 || i >= sim.count || (dead && deadLinger.current > 2.2)) {
         followIndex.current = sim.randomAliveIndex();
+        deadLinger.current = 0;
         i = followIndex.current;
       }
+      sim.followIndex = i;
       if (i >= 0) {
         _target.set(
           sim.posX[i],
@@ -79,6 +87,20 @@ export function CameraRig() {
         0.02,
       );
       controls.target.lerp(new THREE.Vector3(0, 1.6, 0), 0.05);
+    }
+
+    // Kill cam: durante o desfecho, a câmera mergulha no golpe final
+    if (fx.killcam) {
+      const k = 1 - Math.exp(-2.5 * delta);
+      _target.set(fx.killcam.x, fx.killcam.y + 1, fx.killcam.z);
+      controls.target.lerp(_target, k);
+      // Puxa a câmera para perto do ponto
+      _delta.copy(camera.position).sub(controls.target);
+      const dist = _delta.length();
+      if (dist > 14) {
+        _delta.multiplyScalar(1 - k * 0.5);
+        camera.position.copy(controls.target).add(_delta);
+      }
     }
 
     // Screen shake (rugidos, slams)

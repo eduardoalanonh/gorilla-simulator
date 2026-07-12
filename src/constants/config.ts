@@ -75,6 +75,8 @@ export interface StatModifier {
   ranged?: RangedConfig;
   /** Imune a medo/hesitação (zumbis) */
   fearless?: boolean;
+  /** Golpes fazem "squeak" (frangos de borracha) */
+  squeak?: boolean;
 }
 
 const mod = (
@@ -173,10 +175,19 @@ export const MEN_MODIFIERS: StatModifier[] = [
     speed: 1.35,
     crit: 1.5,
   }),
+  mod("frangos", "Frangos de Borracha 🐔", "Dano ridículo, moral imensurável", {
+    damage: 0.3,
+    speed: 1.1,
+    squeak: true,
+  }),
 ];
 
-/** Variante de gorila: stats + visual (escala, cores, cauda, aura, rajada). */
+export type MonsterRig = "gorilla" | "bear" | "trex" | "bull" | "duck";
+
+/** Variante do monstro: stats + visual (escala, cores, cauda, aura, especial). */
 export interface GorillaVariant extends StatModifier {
+  /** Modelo 3D do monstro */
+  monsterRig: MonsterRig;
   /** Escala visual E física (raio do colisor) */
   scale: number;
   fur: number;
@@ -188,8 +199,12 @@ export interface GorillaVariant extends StatModifier {
   tail?: boolean;
   /** Cor das partículas de aura (dourado etc.) */
   aura?: number;
-  /** Rajada de energia pela boca */
+  /** Ataque especial em corredor */
   beam?: boolean;
+  /** Visual do especial: rajada de energia ou investida */
+  beamStyle?: "energy" | "charge";
+  /** Som do grito */
+  cry?: "roar" | "screech" | "quack" | "moo";
 }
 
 const gorilla = (
@@ -199,12 +214,14 @@ const gorilla = (
   m: Partial<Omit<GorillaVariant, "id" | "label" | "description">> = {},
 ): GorillaVariant => ({
   ...mod(id, label, description),
+  monsterRig: "gorilla",
   scale: 1,
   fur: 0x2e2a31,
   back: 0x63666d,
   skin: 0x2a2426,
   eyeGlow: 0x4a1808,
   eyeIntensity: 0.35,
+  cry: "roar",
   ...m,
 });
 
@@ -263,6 +280,59 @@ export const GORILLA_MODIFIERS: GorillaVariant[] = [
     eyeGlow: 0x6fffd0,
     eyeIntensity: 3,
     aura: 0xffd75e,
+  }),
+  gorilla("urso", "Urso Pardo 🐻", "O outro debate da internet", {
+    health: 1.4,
+    damage: 1.2,
+    speed: 1.05,
+    scale: 1.1,
+    monsterRig: "bear",
+    fur: 0x6b4a2d,
+    back: 0x7d583a,
+    skin: 0x3a2a1c,
+  }),
+  gorilla("trex", "T-Rex 🦖", "Mordida apocalíptica, braços decorativos", {
+    health: 2.6,
+    damage: 2.2,
+    speed: 1.15,
+    range: 1.4,
+    scale: 1.7,
+    monsterRig: "trex",
+    fur: 0x4a6634,
+    back: 0x39512a,
+    skin: 0xc9b98a,
+    eyeGlow: 0xffb020,
+    eyeIntensity: 1.2,
+    cry: "screech",
+  }),
+  gorilla("touro", "Touro Furioso 🐂", "Investida que atropela fileiras", {
+    health: 1.1,
+    damage: 1.4,
+    speed: 1.5,
+    cooldown: 0.9,
+    scale: 1.05,
+    monsterRig: "bull",
+    fur: 0x2b2320,
+    back: 0x3a2f28,
+    skin: 0x87755f,
+    eyeGlow: 0xff3020,
+    eyeIntensity: 1.5,
+    beam: true,
+    beamStyle: "charge",
+    cry: "moo",
+  }),
+  gorilla("pato", "Pato Gigante 🦆", "O pato do tamanho de um cavalo. Tema quente.", {
+    health: 1.8,
+    damage: 1.6,
+    speed: 1.25,
+    scale: 1.9,
+    monsterRig: "duck",
+    fur: 0xf2ead8,
+    back: 0xe8dcc2,
+    skin: 0xf2952a,
+    eyeGlow: 0x101010,
+    eyeIntensity: 0.2,
+    cry: "quack",
   }),
 ];
 

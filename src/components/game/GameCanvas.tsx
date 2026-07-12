@@ -9,8 +9,9 @@ import { getArenaPreset } from "@/systems/rocks";
 import { Arena } from "./Arena";
 import { SkyDome } from "./SkyDome";
 import { Men } from "./entities/Men";
-import { Gorilla } from "./entities/Gorilla";
+import { Monster } from "./entities/Monsters";
 import { HealthBars } from "./entities/HealthBars";
+import { CowRenderer } from "./CowRenderer";
 import { ParticlesRenderer } from "./ParticlesRenderer";
 import { ProjectilesRenderer } from "./ProjectilesRenderer";
 import { DamageNumbersRenderer } from "./DamageNumbersRenderer";
@@ -88,8 +89,9 @@ export function GameCanvas() {
         >
           <Arena />
           <Men />
-          <Gorilla />
+          <Monster />
           <HealthBars />
+          <CowRenderer />
           <SimulationLoop />
         </Physics>
         <ParticlesRenderer />

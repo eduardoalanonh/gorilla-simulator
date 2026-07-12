@@ -19,6 +19,8 @@ export function spawnMen(
   points: SpawnPoint[],
 ) {
   const r = PHYSICS.manRadius;
+  // Arena de gelo: menos amortecimento = todo mundo derrapa
+  const damping = sim.ice ? 0.35 : PHYSICS.manDamping;
   for (let i = 0; i < sim.capacity; i++) {
     const active = i < points.length;
     let body = sim.bodies[i];
@@ -26,7 +28,7 @@ export function spawnMen(
     if (!body && active) {
       const desc = rapier.RigidBodyDesc.dynamic()
         .setTranslation(points[i].x, r, points[i].z)
-        .setLinearDamping(PHYSICS.manDamping)
+        .setLinearDamping(damping)
         .setAngularDamping(1.2)
         .enabledRotations(false, false, false);
       body = world.createRigidBody(desc);
@@ -51,7 +53,7 @@ export function spawnMen(
       body.setTranslation({ x: points[i].x, y: r, z: points[i].z }, true);
       body.setLinvel({ x: 0, y: 0, z: 0 }, false);
       body.setAngvel({ x: 0, y: 0, z: 0 }, false);
-      body.setLinearDamping(PHYSICS.manDamping);
+      body.setLinearDamping(damping);
       sim.posX[i] = points[i].x;
       sim.posY[i] = r;
       sim.posZ[i] = points[i].z;
@@ -95,6 +97,7 @@ export function spawnGorilla(world: World, rapier: RapierModule, sim: Simulation
   }
 
   body.setEnabled(true);
+  body.setLinearDamping(sim.ice ? 0.8 : PHYSICS.gorillaDamping);
   body.setTranslation({ x: 0, y: r, z: 0 }, true);
   body.setLinvel({ x: 0, y: 0, z: 0 }, false);
   sim.gorilla.facing = Math.random() * Math.PI * 2;

@@ -2,6 +2,7 @@
 
 import { useEffect, useMemo, useRef } from "react";
 import * as THREE from "three";
+import { mergeGeometries } from "three/examples/jsm/utils/BufferGeometryUtils.js";
 import { useFrame } from "@react-three/fiber";
 import {
   COLORS,
@@ -146,6 +147,7 @@ const _quat = new THREE.Quaternion();
 const _quatPitch = new THREE.Quaternion();
 const _swing = new THREE.Quaternion();
 const _unit = new THREE.Vector3(1, 1, 1);
+const _rootScale = new THREE.Vector3(1, 1, 1);
 const _axisX = new THREE.Vector3(1, 0, 0);
 const _axisY = new THREE.Vector3(0, 1, 0);
 const _color = new THREE.Color();
@@ -183,7 +185,8 @@ export function Men() {
     rig === "human" &&
     (menModifierId === "bastoes" ||
       menModifierId === "medieval" ||
-      menModifierId === "magos");
+      menModifierId === "magos" ||
+      menModifierId === "frangos");
   const hasShield =
     rig === "human" &&
     (menModifierId === "medieval" || menModifierId === "arqueiros");
@@ -201,6 +204,17 @@ export function Men() {
       const g = new THREE.CylinderGeometry(0.03, 0.04, 1.5, 6);
       g.translate(0, -0.35, 0.12);
       return g;
+    }
+    if (menModifierId === "frangos") {
+      // Frango de borracha: corpo bojudo + pescoço + cabeça
+      const body = new THREE.SphereGeometry(0.13, 8, 6);
+      body.scale(1, 0.85, 1.25);
+      body.translate(0, -0.52, 0.1);
+      const neck = new THREE.CylinderGeometry(0.045, 0.055, 0.3, 6);
+      neck.translate(0, -0.32, 0.16);
+      const head = new THREE.SphereGeometry(0.07, 8, 6);
+      head.translate(0, -0.16, 0.18);
+      return mergeGeometries([body, neck, head])!;
     }
     const g = new THREE.CylinderGeometry(0.035, 0.045, 1.05, 6);
     g.translate(0, -0.5, 0.1);
@@ -408,7 +422,9 @@ export function Men() {
         }
       }
 
-      _root.compose(_pos, _quat, _unit);
+      // Mutador "gigantes": escala visual (o colisor continua o mesmo)
+      _rootScale.setScalar(sim.menScale);
+      _root.compose(_pos, _quat, _rootScale);
 
       const gait = sim.gaitPhase[i];
       const hSpeed = dead ? 0 : Math.sqrt(sim.velX[i] ** 2 + sim.velZ[i] ** 2);
@@ -536,8 +552,20 @@ export function Men() {
           frustumCulled={false}
         >
           <meshStandardMaterial
-            color={menModifierId === "medieval" ? "#b8bec9" : "#7a5a38"}
-            roughness={menModifierId === "medieval" ? 0.35 : 0.9}
+            color={
+              menModifierId === "medieval"
+                ? "#b8bec9"
+                : menModifierId === "frangos"
+                  ? "#f2c81e"
+                  : "#7a5a38"
+            }
+            roughness={
+              menModifierId === "medieval"
+                ? 0.35
+                : menModifierId === "frangos"
+                  ? 0.45
+                  : 0.9
+            }
             metalness={menModifierId === "medieval" ? 0.7 : 0}
           />
         </instancedMesh>

@@ -24,6 +24,7 @@ function deformedRock(seed: number, detail = 1) {
 /** Arena circular: terra batida, pedras, muralha rochosa, vegetação e tochas. */
 export function Arena() {
   const arenaId = useSimulationStore((s) => s.arenaId);
+  const ice = useSimulationStore((s) => s.mutators.ice);
   const preset = getArenaPreset(arenaId);
   const dirtTexture = useMemo(() => makeDirtTexture(1024, 42), []);
   const R = preset.radius;
@@ -134,10 +135,16 @@ export function Arena() {
   }, [R, preset.torches]);
 
   return (
-    <group key={preset.id}>
-      {/* Chão + colisor */}
+    <group key={`${preset.id}${ice ? "-ice" : ""}`}>
+      {/* Chão + colisor (escorregadio no mutador de gelo) */}
       <RigidBody type="fixed" colliders={false}>
-        <CuboidCollider args={[R + 30, 1, R + 30]} position={[0, -1, 0]} />
+        {/* friction sempre numérica: undefined explícito vira NaN no rapier
+            e congela todo movimento em contato com o chão */}
+        <CuboidCollider
+          args={[R + 30, 1, R + 30]}
+          position={[0, -1, 0]}
+          friction={ice ? 0.02 : 0.5}
+        />
         {/* Colisores da muralha */}
         {wallBlocks.map((b, i) => (
           <CuboidCollider
@@ -153,8 +160,8 @@ export function Arena() {
         <circleGeometry args={[R + 1.5, 72]} />
         <meshStandardMaterial
           map={dirtTexture}
-          color={preset.groundTint}
-          roughness={0.96}
+          color={ice ? "#9cc4dc" : preset.groundTint}
+          roughness={ice ? 0.35 : 0.96}
           metalness={0}
         />
       </mesh>

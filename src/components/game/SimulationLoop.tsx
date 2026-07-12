@@ -10,9 +10,11 @@ import { reviveMan, spawnGorilla, spawnMen } from "@/systems/physics";
 import { computeSpawnRing, hordeSpawnPoint } from "@/systems/spawn";
 import { checkWinner, updateGorilla, updateMen } from "@/systems/ai";
 import { activeProjectiles, updateProjectiles } from "@/systems/projectiles";
-import { audioManager } from "@/systems/audio";
+import { updateArenaEvents } from "@/systems/arenaEvents";
+import { audioManager, type VoiceName } from "@/systems/audio";
 import { fx } from "@/systems/fx";
 import { getArenaPreset } from "@/systems/rocks";
+import { manIdentity } from "@/utils/names";
 import { EntityState } from "@/types/simulation";
 
 /**
@@ -35,9 +37,12 @@ export function SimulationLoop() {
   const menCount = useSimulationStore((s) => s.menCount);
   const menModifierId = useSimulationStore((s) => s.menModifierId);
   const gorillaModifierId = useSimulationStore((s) => s.gorillaModifierId);
-  const hordeMode = useSimulationStore((s) => s.hordeMode);
+  const battleMode = useSimulationStore((s) => s.battleMode);
   const arenaId = useSimulationStore((s) => s.arenaId);
   const muted = useSimulationStore((s) => s.muted);
+  const cartoonMode = useSimulationStore((s) => s.cartoonMode);
+  const lab = useSimulationStore((s) => s.lab);
+  const mutators = useSimulationStore((s) => s.mutators);
 
   // (Re)spawn do mundo — debounce para o slider não recriar 1000 corpos por tick
   const lastWorld = useRef<typeof world | null>(null);
@@ -59,11 +64,18 @@ export function SimulationLoop() {
     const delay = spawnedCount.current === -1 ? 0 : 280;
     const handle = setTimeout(() => {
       const preset = getArenaPreset(arenaId);
-      sim.resetRun(menCount, menModifierId, gorillaModifierId, hordeMode, preset);
+      sim.resetRun(menCount, menModifierId, gorillaModifierId, {
+        mode: battleMode,
+        arena: preset,
+        lab,
+        mutators,
+        cartoon: cartoonMode,
+      });
       spawnGorilla(world, rapier, sim);
       spawnMen(world, rapier, sim, computeSpawnRing(menCount, preset));
       spawnedCount.current = menCount;
       ending.current = null;
+      fx.killcam = null;
       useSimulationStore.getState().syncRuntime({
         aliveMen: menCount,
         deadMen: 0,
@@ -74,22 +86,36 @@ export function SimulationLoop() {
       });
     }, delay);
     return () => clearTimeout(handle);
-  }, [runId, menCount, menModifierId, gorillaModifierId, hordeMode, arenaId, phase, world, rapier]);
+  }, [runId, menCount, menModifierId, gorillaModifierId, battleMode, arenaId, phase, world, rapier, lab, mutators, cartoonMode]);
 
   useEffect(() => {
     sim.running = phase === "running";
     if (phase === "running") {
       audioManager.resume();
-      audioManager.playVoice(sim.horde ? "survival_mode" : "fight");
+      audioManager.playVoice(sim.mode === "horde" ? "survival_mode" : "fight");
     } else if (phase === "ready") {
       audioManager.playVoice("prepare_yourself");
     }
   }, [phase]);
 
-
   useEffect(() => {
     audioManager.setMuted(muted);
   }, [muted]);
+
+  // Modo cartum pode ser ligado no meio da batalha
+  useEffect(() => {
+    sim.cartoon = cartoonMode;
+  }, [cartoonMode]);
+
+
+  // Mutador: gravidade lunar
+  useEffect(() => {
+    world.gravity = {
+      x: 0,
+      y: mutators.lowGravity ? -3.5 : PHYSICS.gravity,
+      z: 0,
+    };
+  }, [mutators.lowGravity, world]);
 
   useFrame((_, delta) => {
     const store = useSimulationStore.getState();
@@ -127,13 +153,14 @@ export function SimulationLoop() {
       updateMen(sim, simDt);
       updateGorilla(sim, simDt);
       updateProjectiles(sim, simDt);
+      updateArenaEvents(sim, simDt, store.arenaEvents);
       if (sim.running) {
         sim.time += simDt;
         sim.pruneRecentDeaths(AI.hesitationDeathWindow + 1);
         sim.sampleHistory(simDt);
 
         // Modo horda: recicla cadáveres assentados como reforços na borda
-        if (sim.horde && sim.gorilla.hp > 0) {
+        if (sim.mode === "horde" && sim.gorilla.hp > 0) {
           sim.hordeSpawnTimer -= simDt;
           if (sim.hordeSpawnTimer <= 0) {
             sim.hordeSpawnTimer = HORDE.spawnInterval;
@@ -147,6 +174,29 @@ export function SimulationLoop() {
               const p = hordeSpawnPoint(sim.arena);
               reviveMan(sim, slot, p.x, p.z);
             }
+          }
+        }
+
+        // Modo ondas: limpa a arena → pausa dramática → onda maior
+        if (sim.mode === "waves" && sim.gorilla.hp > 0 && sim.aliveCount === 0) {
+          sim.waveBreakTimer += simDt;
+          if (sim.waveBreakTimer > 2.2) {
+            sim.waveBreakTimer = 0;
+            sim.wave++;
+            sim.gorilla.hp = Math.min(
+              sim.gorilla.maxHp,
+              sim.gorilla.hp + sim.gorilla.maxHp * 0.15,
+            );
+            const next = Math.min(
+              Math.round(spawnedCount.current * Math.pow(1.35, sim.wave - 1)),
+              1000,
+            );
+            sim.resetMen(next);
+            spawnMen(world, rapier, sim, computeSpawnRing(next, sim.arena));
+            store.announceWave(sim.wave);
+            audioManager.playVoice(
+              `round_${Math.min(sim.wave, 5)}` as VoiceName,
+            );
           }
         }
       }
@@ -237,11 +287,18 @@ export function SimulationLoop() {
     // Fim de batalha (com pequeno delay cinematográfico)
     if (store.phase === "running") {
       let winner = checkWinner(sim);
-      // Na horda só o gorila caindo encerra — reforços estão a caminho
-      if (sim.horde && winner === "gorilla") winner = null;
+      // Horda/ondas: só o gorila caindo encerra — reforços estão a caminho
+      if (sim.mode !== "classic" && winner === "gorilla") winner = null;
       if (winner && !ending.current) {
         ending.current = { winner, t: 0 };
         sim.running = winner === "men"; // homens comemoram? não — congela IA do lado morto
+        // Kill cam: zoom no ponto do golpe final
+        if (winner === "men" && sim.gorilla.body) {
+          const p = sim.gorilla.body.translation();
+          fx.killcam = { x: p.x, y: p.y, z: p.z };
+        } else {
+          fx.killcam = { x: sim.lastDeathX, y: 1, z: sim.lastDeathZ };
+        }
       }
       if (ending.current) {
         ending.current.t += dt;
@@ -255,8 +312,9 @@ export function SimulationLoop() {
             deaths: sim.deadCount,
             gorillaHp: Math.max(0, sim.gorilla.hp),
           });
+          fx.killcam = null;
           // Locutor encerra a batalha
-          if (sim.horde) audioManager.playVoice("game_over");
+          if (sim.mode !== "classic") audioManager.playVoice("game_over");
           else if (w === "men") audioManager.playVoice("you_win");
           else
             audioManager.playVoice(
@@ -266,7 +324,7 @@ export function SimulationLoop() {
             );
           store.finish(w, {
             winner: w,
-            mode: sim.horde ? "horde" : "classic",
+            mode: sim.mode,
             history: sim.history.slice(),
             durationSec: sim.time,
             initialMen: sim.count,
@@ -278,6 +336,15 @@ export function SimulationLoop() {
             gorillaDamage: Math.round(sim.gorilla.damageDealt),
             gorillaHpLeft: Math.max(0, Math.round(sim.gorilla.hp)),
             gorillaMaxHp: sim.gorilla.maxHp,
+            waves: sim.wave,
+            namesSeed: sim.namesSeed,
+            fun: {
+              totalFlight: Math.round(sim.totalFlight),
+              maxFlight: Math.round(sim.maxFlight * 10) / 10,
+              maxFlightIndex: sim.maxFlightIndex,
+              firstFleeIndex: sim.firstFleeIndex,
+              firstFleeAt: Math.round(sim.firstFleeAt),
+            },
           });
         }
       }
@@ -287,6 +354,19 @@ export function SimulationLoop() {
     syncTimer.current -= delta;
     if (syncTimer.current <= 0) {
       syncTimer.current = 0.2;
+
+      // Legenda do homem seguido pela câmera
+      let followedLabel: string | null = null;
+      let followedNecro: string | null = null;
+      if (store.cameraMode === "man" && sim.followIndex >= 0) {
+        const id = manIdentity(sim.followIndex, sim.namesSeed);
+        if (sim.state[sim.followIndex] === EntityState.Dead) {
+          followedNecro = `✝ ${id.name} — ${id.necro}`;
+        } else {
+          followedLabel = `${id.name}, ${id.age} — ${id.phrase}`;
+        }
+      }
+
       store.syncRuntime({
         aliveMen: sim.aliveCount,
         deadMen: sim.deadCount,
@@ -296,6 +376,8 @@ export function SimulationLoop() {
         fps: Math.round(fpsEma.current),
         entityCount:
           sim.count + 1 + (fx.pool?.activeCount ?? 0) + activeProjectiles(sim),
+        followedLabel,
+        followedNecro,
       });
     }
   });

@@ -6,34 +6,83 @@ import { Button } from "@/components/ui/button";
 import { Separator } from "@/components/ui/separator";
 import { useSimulationStore } from "@/store/simulationStore";
 import { formatTime } from "@/utils/random";
+import { manIdentity } from "@/utils/names";
 import { BattleChart } from "./BattleChart";
+
+/** Avaliação da luta pelo próprio monstro (estrelas). */
+function monsterReview(gorillaWon: boolean, hpFrac: number) {
+  if (!gorillaWon)
+    return { stars: "★★★★★", text: "“5 estrelas. Voltaria a lutar.” (não vai voltar)" };
+  if (hpFrac > 0.8) return { stars: "★☆☆☆☆", text: "“Muito fácil. Mandem mais.”" };
+  if (hpFrac > 0.4) return { stars: "★★★☆☆", text: "“Deu pra suar.”" };
+  return { stars: "★★★★☆", text: "“Quase respeitável.”" };
+}
 
 export function EndScreen() {
   const results = useSimulationStore((s) => s.results);
   const reset = useSimulationStore((s) => s.reset);
+  const guess = useSimulationStore((s) => s.guess);
+  const guessRight = useSimulationStore((s) => s.guessRight);
+  const guessTotal = useSimulationStore((s) => s.guessTotal);
+  const store = useSimulationStore;
   const [copied, setCopied] = useState(false);
 
   if (!results) return null;
 
   const gorillaWon = results.winner === "gorilla";
   const horde = results.mode === "horde";
+  const waves = results.mode === "waves";
   const title = horde
     ? "🌊 Fim da Horda"
-    : gorillaWon
-      ? "🏆 Vitória do Gorila"
-      : "🏆 Vitória dos Homens";
+    : waves
+      ? `🌀 Caiu na onda ${results.waves}`
+      : gorillaWon
+        ? "🏆 Vitória do Monstro"
+        : "🏆 Vitória dos Homens";
+
+  const review = monsterReview(
+    gorillaWon,
+    results.gorillaHpLeft / results.gorillaMaxHp,
+  );
+  const maxFlightId =
+    results.fun.maxFlightIndex >= 0
+      ? manIdentity(results.fun.maxFlightIndex, results.namesSeed)
+      : null;
+  const fleeId =
+    results.fun.firstFleeIndex >= 0
+      ? manIdentity(results.fun.firstFleeIndex, results.namesSeed)
+      : null;
+
+  // Link com a configuração atual — quem receber joga a mesma simulação
+  const buildShareUrl = () => {
+    const st = store.getState();
+    const params = new URLSearchParams({
+      h: String(st.menCount),
+      op: st.menModifierId,
+      go: st.gorillaModifierId,
+      ar: st.arenaId,
+      md: st.battleMode,
+    });
+    return `${window.location.origin}${window.location.pathname}?${params}`;
+  };
 
   const shareText = [
     `🦍 Gorilla Simulator`,
     horde
-      ? `Modo Horda: o gorila derrubou ${results.deaths.toLocaleString("pt-BR")} antes de cair!`
-      : gorillaWon
-        ? `O gorila venceu ${results.initialMen} ${results.initialMen === 1 ? "homem" : "homens"}!`
-        : `${results.initialMen} homens derrotaram o gorila!`,
+      ? `Modo Horda: o monstro derrubou ${results.deaths.toLocaleString("pt-BR")} antes de cair!`
+      : waves
+        ? `Modo Ondas: o monstro sobreviveu até a onda ${results.waves} (${results.deaths.toLocaleString("pt-BR")} abatidos)!`
+        : gorillaWon
+          ? `O monstro venceu ${results.initialMen} ${results.initialMen === 1 ? "oponente" : "oponentes"}!`
+          : `${results.initialMen} oponentes derrotaram o monstro!`,
     `⏱️ ${formatTime(results.durationSec)} · 💀 ${results.deaths} mortes · 🧍 ${results.survivors} sobreviventes`,
-    `🦍 HP restante: ${results.gorillaHpLeft.toLocaleString("pt-BR")}/${results.gorillaMaxHp.toLocaleString("pt-BR")}`,
-    `Quantos homens você acha que precisa?`,
-  ].join("\n");
+    maxFlightId
+      ? `🏅 Maior voo: ${maxFlightId.name}, ${results.fun.maxFlight} m`
+      : "",
+    `Tenta bater: ${typeof window !== "undefined" ? buildShareUrl() : ""}`,
+  ]
+    .filter(Boolean)
+    .join("\n");
 
   const share = async () => {
     try {
@@ -75,9 +124,9 @@ export function EndScreen() {
           {title}
         </h2>
         <p className="mt-1 text-center text-sm text-zinc-400">
-          {horde ? (
+          {horde || waves ? (
             <>
-              O gorila derrubou{" "}
+              O monstro derrubou{" "}
               <span className="font-bold text-amber-300">
                 {results.deaths.toLocaleString("pt-BR")}
               </span>{" "}
@@ -90,6 +139,25 @@ export function EndScreen() {
           )}
         </p>
 
+        {/* Avaliação do monstro + palpite */}
+        <div className="mt-3 rounded-xl border border-white/8 bg-white/5 px-3 py-2 text-center">
+          <p className="text-lg tracking-widest text-amber-300">{review.stars}</p>
+          <p className="text-xs italic text-zinc-400">{review.text}</p>
+        </div>
+        {guess !== null && results.mode === "classic" && (
+          <p className="mt-2 text-center text-sm">
+            {guess === results.winner ? (
+              <span className="text-emerald-300">
+                🎯 Você acertou o palpite! ({guessRight}/{guessTotal})
+              </span>
+            ) : (
+              <span className="text-red-300">
+                ❌ Errou o palpite ({guessRight}/{guessTotal})
+              </span>
+            )}
+          </p>
+        )}
+
         <Separator className="my-5 bg-white/10" />
 
         <BattleChart
@@ -101,7 +169,10 @@ export function EndScreen() {
 
         <div className="grid grid-cols-2 gap-3">
           <Stat label="Tempo de batalha" value={formatTime(results.durationSec)} />
-          <Stat label="Homens no início" value={results.initialMen} />
+          <Stat
+            label={waves ? "Ondas sobrevividas" : "Homens no início"}
+            value={waves ? results.waves : results.initialMen}
+          />
           <Stat label="Sobreviventes" value={results.survivors} />
           <Stat label="Mortes" value={results.deaths} />
           <Stat
@@ -109,7 +180,7 @@ export function EndScreen() {
             value={results.menHits.toLocaleString("pt-BR")}
           />
           <Stat
-            label="Golpes (gorila)"
+            label="Golpes (monstro)"
             value={results.gorillaHits.toLocaleString("pt-BR")}
           />
           <Stat
@@ -117,10 +188,41 @@ export function EndScreen() {
             value={results.menDamage.toLocaleString("pt-BR")}
           />
           <Stat
-            label="Dano do gorila"
+            label="Dano do monstro"
             value={results.gorillaDamage.toLocaleString("pt-BR")}
           />
         </div>
+
+        {/* Estatísticas absurdas */}
+        {(results.fun.totalFlight > 0 || fleeId) && (
+          <div className="mt-3 space-y-1.5 rounded-xl border border-white/8 bg-white/5 px-3 py-2.5 text-xs text-zinc-300">
+            <p className="text-[11px] uppercase tracking-wide text-zinc-500">
+              Fatos da batalha
+            </p>
+            {results.fun.totalFlight > 0 && (
+              <p>
+                ✈️ Distância total voada pelos homens:{" "}
+                <b>
+                  {results.fun.totalFlight >= 1000
+                    ? `${(results.fun.totalFlight / 1000).toFixed(1)} km`
+                    : `${results.fun.totalFlight} m`}
+                </b>
+              </p>
+            )}
+            {maxFlightId && results.fun.maxFlight > 2 && (
+              <p>
+                🏅 Maior arremesso: <b>{maxFlightId.name}</b>,{" "}
+                {results.fun.maxFlight} m (recorde da arena)
+              </p>
+            )}
+            {fleeId && (
+              <p>
+                🏃 Primeiro a hesitar: <b>{fleeId.name}</b>, aos{" "}
+                {results.fun.firstFleeAt}s — {fleeId.necro.toLowerCase()}
+              </p>
+            )}
+          </div>
+        )}
 
         <div className="mt-6 flex flex-col gap-2">
           <Button

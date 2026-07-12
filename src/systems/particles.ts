@@ -233,6 +233,28 @@ export class ParticlePool {
       case "gorillaStep":
         this.dustPuff(e.x, 0.12, e.z, 0.9);
         break;
+      case "lightning":
+        // Coluna de luz + faíscas no chão
+        for (let k = 0; k < 16; k++) {
+          this.spawn(e.x, 0.4 + k * 0.8, e.z, {
+            count: 1,
+            speed: 0.2,
+            up: 0,
+            spread: 0.15,
+            size: 0.34,
+            life: 0.35,
+            gravity: 0,
+            color: 0xcfe4ff,
+            colorJitter: 0.05,
+          });
+        }
+        this.groundRing(e.x, e.z, 1.6);
+        this.debrisBurst(e.x, 0.3, e.z, 1.2);
+        break;
+      case "cowLand":
+        this.debrisBurst(e.x, 0.3, e.z, 1.6);
+        this.groundRing(e.x, e.z, 1.8);
+        break;
       case "gorillaDie":
         this.debrisBurst(e.x, 0.4, e.z, 2);
         this.groundRing(e.x, e.z, 2.2);

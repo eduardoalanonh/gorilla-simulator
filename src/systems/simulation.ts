@@ -14,12 +14,30 @@ import {
   type RangedConfig,
 } from "@/constants/config";
 import {
+  type BattleMode,
   EntityState,
   type EffectEvent,
   type GorillaAction,
   type HistorySample,
 } from "@/types/simulation";
 import { SpatialHash } from "./spatial";
+
+/** Opções extras de uma rodada (laboratório, mutadores, cartum). */
+export interface RunOptions {
+  mode: BattleMode;
+  arena: ArenaPreset;
+  lab: { menHp: number; menDmg: number; gorHp: number; gorDmg: number };
+  mutators: { lowGravity: boolean; ice: boolean; giants: boolean };
+  cartoon: boolean;
+}
+
+const RUN_DEFAULTS: RunOptions = {
+  mode: "classic",
+  arena: ARENA_PRESETS[0],
+  lab: { menHp: 1, menDmg: 1, gorHp: 1, gorDmg: 1 },
+  mutators: { lowGravity: false, ice: false, giants: false },
+  cartoon: false,
+};
 
 export interface Projectile {
   active: boolean;
@@ -121,6 +139,8 @@ export class Simulation {
   manRanged: RangedConfig | null = null;
   /** Imune a medo/hesitação (zumbis) */
   manFearless = false;
+  /** Golpes com som de frango de borracha */
+  manSqueak = false;
   gorillaStats: FighterStats & { roarCooldown: number } = { ...GORILLA_BASE };
   gorillaVariant: GorillaVariant = GORILLA_MODIFIERS[0];
   /** Raio físico do gorila (escala com a variante) */
@@ -135,10 +155,37 @@ export class Simulation {
   menDamage = 0;
   running = false;
 
-  /** Modo horda: mortos renascem na borda até o gorila cair */
-  horde = false;
+  /** Modo de batalha (clássico / horda infinita / ondas) */
+  mode: BattleMode = "classic";
   hordeSpawnTimer = 0;
   hordeScanCursor = 0;
+  /** Onda atual (modo ondas) */
+  wave = 1;
+  waveBreakTimer = 0;
+  /** Física de desenho animado (knockback exagerado + giros) */
+  cartoon = false;
+  /** Escala visual dos homens (mutador "gigantes") */
+  menScale = 1;
+  /** Chão de gelo (mutador) */
+  ice = false;
+  /** Seed das identidades cômicas (nomes) */
+  namesSeed = 0;
+  /** Índice do homem seguido pela câmera (escrito pelo CameraRig) */
+  followIndex = -1;
+
+  /** Estatísticas absurdas */
+  flightDist = new Float32Array(MAX_MEN);
+  totalFlight = 0;
+  maxFlight = 0;
+  maxFlightIndex = -1;
+  firstFleeIndex = -1;
+  firstFleeAt = 0;
+  lastDeathX = 0;
+  lastDeathZ = 0;
+
+  /** Vaca caindo do céu (evento de arena) */
+  cow = { active: false, x: 0, y: 0, z: 0, vy: 0, landed: false, timer: 0 };
+  eventTimer = 0;
 
   /** Linha do tempo da batalha (gráfico da tela final) */
   history: HistorySample[] = [];
@@ -190,7 +237,7 @@ export class Simulation {
     y: number,
     z: number,
     power = 1,
-    extra?: Pick<EffectEvent, "crit" | "source">,
+    extra?: Pick<EffectEvent, "crit" | "source" | "cry">,
   ) {
     if (this.effects.length < 256)
       this.effects.push({ type, x, y, z, power, ...extra });
@@ -201,10 +248,13 @@ export class Simulation {
     count: number,
     menModId: string,
     gorillaModId: string,
-    horde = false,
-    arena: ArenaPreset = ARENA_PRESETS[0],
+    options: Partial<RunOptions> = {},
   ) {
-    this.arena = arena;
+    const opts: RunOptions = { ...RUN_DEFAULTS, ...options };
+    this.arena = opts.arena;
+    this.mode = opts.mode;
+    this.cartoon = opts.cartoon;
+    this.ice = opts.mutators.ice;
     this.count = count;
     this.time = 0;
     this.running = false;
@@ -214,12 +264,21 @@ export class Simulation {
     this.menDamage = 0;
     this.effects.length = 0;
     this.recentDeaths.length = 0;
-    this.horde = horde;
     this.hordeSpawnTimer = 0;
     this.hordeScanCursor = 0;
+    this.wave = 1;
+    this.waveBreakTimer = 0;
     this.history.length = 0;
     this.historyTimer = 0;
     this.historyInterval = 0.5;
+    this.namesSeed = Math.floor(Math.random() * 1e6);
+    this.totalFlight = 0;
+    this.maxFlight = 0;
+    this.maxFlightIndex = -1;
+    this.firstFleeIndex = -1;
+    this.firstFleeAt = 0;
+    this.cow.active = false;
+    this.eventTimer = 10 + Math.random() * 10;
 
     const menMod = MEN_MODIFIERS.find((m) => m.id === menModId) ?? MEN_MODIFIERS[0];
     const gorMod =
@@ -227,6 +286,7 @@ export class Simulation {
     this.manStats = applyModifier(MAN_BASE, menMod);
     this.manRanged = menMod.ranged ?? null;
     this.manFearless = !!menMod.fearless;
+    this.manSqueak = !!menMod.squeak;
     for (const p of this.projectiles) p.active = false;
     this.gorillaVariant = gorMod;
     this.gorillaRadius = PHYSICS.gorillaRadius * gorMod.scale;
@@ -234,6 +294,25 @@ export class Simulation {
       ...applyModifier(GORILLA_BASE, gorMod),
       roarCooldown: GORILLA_BASE.roarCooldown,
     };
+
+    // Laboratório: multiplicadores livres por cima dos modificadores
+    this.manStats.maxHealth = Math.max(1, this.manStats.maxHealth * opts.lab.menHp);
+    this.manStats.attackDamage *= opts.lab.menDmg;
+    this.manStats.attackVariance *= opts.lab.menDmg;
+    this.gorillaStats.maxHealth = Math.max(
+      1,
+      Math.round(this.gorillaStats.maxHealth * opts.lab.gorHp),
+    );
+    this.gorillaStats.attackDamage *= opts.lab.gorDmg;
+    this.gorillaStats.attackVariance *= opts.lab.gorDmg;
+
+    // Mutador: homens gigantes (escala visual + músculo)
+    this.menScale = opts.mutators.giants ? 1.55 : 1;
+    if (opts.mutators.giants) {
+      this.manStats.maxHealth *= 2.2;
+      this.manStats.attackDamage *= 1.8;
+      this.manStats.attackRange += 0.5;
+    }
 
     const prevBody = this.gorilla.body;
     const prevCollider = this.gorilla.collider;
@@ -243,6 +322,13 @@ export class Simulation {
     this.gorilla.hp = this.gorillaStats.maxHealth;
     this.gorilla.maxHp = this.gorillaStats.maxHealth;
 
+    this.resetMen(count);
+  }
+
+  /** Reinicia apenas os homens (usado entre ondas no modo ondas). */
+  resetMen(count: number) {
+    this.count = count;
+    this.aliveCount = count;
     for (let i = 0; i < MAX_MEN; i++) {
       this.state[i] = i < count ? EntityState.Idle : EntityState.Dead;
       this.hp[i] = this.manStats.maxHealth;
@@ -258,6 +344,7 @@ export class Simulation {
       this.airborne[i] = 0;
       this.lastDist[i] = 999;
       this.stuckCount[i] = 0;
+      this.flightDist[i] = 0;
       this.velX[i] = this.velY[i] = this.velZ[i] = 0;
     }
   }
@@ -337,6 +424,14 @@ export class Simulation {
     if (this.history.length > 640) {
       this.history = this.history.filter((_, i) => i % 2 === 0);
       this.historyInterval *= 2;
+    }
+  }
+
+  /** Registra o primeiro covarde da batalha (estatística de honra). */
+  noteFlee(i: number) {
+    if (this.firstFleeIndex < 0 && this.running) {
+      this.firstFleeIndex = i;
+      this.firstFleeAt = this.time;
     }
   }
 

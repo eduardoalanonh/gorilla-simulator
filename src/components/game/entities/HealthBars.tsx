@@ -42,7 +42,7 @@ export function HealthBars() {
       const frac = Math.max(sim.hp[i] / maxHp, 0.02);
       _pos.set(
         sim.posX[i],
-        sim.posY[i] - PHYSICS.manRadius + barHeight,
+        sim.posY[i] - PHYSICS.manRadius + barHeight * sim.menScale,
         sim.posZ[i],
       );
       _scale.set(0.68 * frac, 0.07, 1);

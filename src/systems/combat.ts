@@ -28,7 +28,7 @@ export function manAttack(sim: Simulation, i: number) {
   const g = sim.gorilla;
   if (g.body) {
     sim.emit(
-      "punch",
+      sim.manSqueak ? "squeak" : "punch",
       sim.posX[i],
       sim.posY[i] + 0.9,
       sim.posZ[i],
@@ -62,18 +62,25 @@ export function gorillaHitMan(
 
   const body = sim.bodies[i];
   if (body) {
+    // Modo cartum: todo mundo vira projétil de circo
+    const cartoonK = sim.cartoon ? 2.4 : 1;
     const kb =
       sim.gorillaStats.knockbackForce *
       (roll.crit ? 1.5 : 1) *
       powerScale *
+      cartoonK *
       (0.8 + Math.random() * 0.5);
     const mass = sim.manStats.weightKg;
-    const up = kb * (0.45 + Math.random() * 0.35);
+    const up = kb * (sim.cartoon ? 0.7 : 0.45 + Math.random() * 0.35);
     body.applyImpulse(
       { x: dirX * kb * mass * 0.42, y: up * mass * 0.42, z: dirZ * kb * mass * 0.42 },
       true,
     );
     sim.airborne[i] = 1;
+    // Apito de mola quando alguém decola de verdade
+    if ((sim.cartoon || kb > 16) && Math.random() < 0.4) {
+      sim.emit("whistle", sim.posX[i], sim.posY[i] + 1, sim.posZ[i], 1);
+    }
   }
 
   sim.emit("impact", sim.posX[i], sim.posY[i] + 0.5, sim.posZ[i], roll.crit ? 1.5 : 1, {
@@ -105,17 +112,21 @@ export function killMan(sim: Simulation, i: number) {
   sim.aliveCount--;
   sim.deadCount++;
   sim.recentDeaths.push({ x: sim.posX[i], z: sim.posZ[i], t: sim.time });
+  sim.lastDeathX = sim.posX[i];
+  sim.lastDeathZ = sim.posZ[i];
 
   const body = sim.bodies[i];
   if (body) {
     // Ragdoll simplificado: libera rotações e deixa a física tombar o corpo
+    // (no modo cartum vira pião)
+    const spin = sim.cartoon ? 5 : 1;
     body.setEnabledRotations(true, true, true, true);
     body.setLinearDamping(1.6);
     body.setAngvel(
       {
-        x: (Math.random() - 0.5) * 6,
-        y: (Math.random() - 0.5) * 4,
-        z: (Math.random() - 0.5) * 6,
+        x: (Math.random() - 0.5) * 6 * spin,
+        y: (Math.random() - 0.5) * 4 * spin,
+        z: (Math.random() - 0.5) * 6 * spin,
       },
       true,
     );
@@ -138,6 +149,7 @@ export function killMan(sim: Simulation, i: number) {
           AI.hesitationDuration[0] +
           Math.random() * (AI.hesitationDuration[1] - AI.hesitationDuration[0]);
         sim.state[j] = EntityState.Recovering;
+        sim.noteFlee(j);
       }
     });
   }

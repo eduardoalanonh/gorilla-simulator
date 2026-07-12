@@ -225,19 +225,155 @@ export function ControlPanel() {
 
       <Separator className="bg-white/10" />
 
-      <div className="space-y-1">
-        <CheckRow
-          id="horde"
-          label="🌊 Modo Horda (infinito)"
-          checked={s.hordeMode}
-          onChange={s.toggleHorde}
-          disabled={running}
-        />
-        <p className="pl-6 text-[11px] leading-snug text-zinc-500">
-          Reforços não param de chegar pela borda. Score = quantos o gorila
-          derruba antes de cair.
+      <div className="space-y-2">
+        <Label className="text-zinc-300">Modo de batalha</Label>
+        <div className="grid grid-cols-3 gap-1">
+          {(
+            [
+              ["classic", "Clássico"],
+              ["horde", "🌊 Horda"],
+              ["waves", "🌀 Ondas"],
+            ] as const
+          ).map(([id, label]) => (
+            <button
+              key={id}
+              disabled={running}
+              onClick={() => s.setBattleMode(id)}
+              className={cn(
+                "rounded-md border py-1.5 text-xs font-semibold transition-colors disabled:opacity-40",
+                s.battleMode === id
+                  ? "border-sky-400/70 bg-sky-500/25 text-sky-200"
+                  : "border-white/10 bg-white/5 text-zinc-400 hover:bg-white/10",
+              )}
+            >
+              {label}
+            </button>
+          ))}
+        </div>
+        <p className="text-[11px] leading-snug text-zinc-500">
+          {s.battleMode === "horde"
+            ? "Reforços infinitos pela borda. Score = abatidos antes do monstro cair."
+            : s.battleMode === "waves"
+              ? "Ondas cada vez maiores; o monstro cura 15% entre elas."
+              : "Uma batalha, um vencedor."}
         </p>
       </div>
+
+      {/* Palpite pré-batalha */}
+      {s.battleMode === "classic" && s.phase === "ready" && (
+        <div className="space-y-1.5">
+          <Label className="text-zinc-300">
+            🔮 Seu palpite{" "}
+            {s.guessTotal > 0 && (
+              <span className="text-[11px] text-zinc-500">
+                (acertos: {s.guessRight}/{s.guessTotal})
+              </span>
+            )}
+          </Label>
+          <div className="grid grid-cols-2 gap-1.5">
+            {(
+              [
+                ["gorilla", "🦍 Monstro vence"],
+                ["men", "🧍 Homens vencem"],
+              ] as const
+            ).map(([id, label]) => (
+              <button
+                key={id}
+                onClick={() => s.setGuess(s.guess === id ? null : id)}
+                className={cn(
+                  "rounded-md border py-1.5 text-xs font-semibold transition-colors",
+                  s.guess === id
+                    ? "border-purple-400/70 bg-purple-500/25 text-purple-200"
+                    : "border-white/10 bg-white/5 text-zinc-400 hover:bg-white/10",
+                )}
+              >
+                {label}
+              </button>
+            ))}
+          </div>
+        </div>
+      )}
+
+      <Separator className="bg-white/10" />
+
+      <div className="space-y-2">
+        <Label className="text-zinc-300">Mutadores</Label>
+        <div className="grid grid-cols-1 gap-2">
+          <CheckRow
+            id="mut-grav"
+            label="🌙 Gravidade lunar"
+            checked={s.mutators.lowGravity}
+            onChange={() => s.toggleMutator("lowGravity")}
+          />
+          <CheckRow
+            id="mut-ice"
+            label="🧊 Arena de gelo"
+            checked={s.mutators.ice}
+            onChange={() => s.toggleMutator("ice")}
+            disabled={running}
+          />
+          <CheckRow
+            id="mut-giants"
+            label="🗿 Homens gigantes"
+            checked={s.mutators.giants}
+            onChange={() => s.toggleMutator("giants")}
+            disabled={running}
+          />
+          <CheckRow
+            id="cartoon"
+            label="🎪 Modo Cartum (voos absurdos)"
+            checked={s.cartoonMode}
+            onChange={() => s.toggle("cartoonMode")}
+          />
+          <CheckRow
+            id="events"
+            label="⚡ Eventos da arena (raios, vacas)"
+            checked={s.arenaEvents}
+            onChange={() => s.toggle("arenaEvents")}
+          />
+        </div>
+      </div>
+
+      <Separator className="bg-white/10" />
+
+      {/* Laboratório: multiplicadores livres */}
+      <details className="group">
+        <summary className="cursor-pointer select-none text-sm font-medium text-zinc-300 hover:text-zinc-100">
+          🧪 Laboratório{" "}
+          <span className="text-[11px] text-zinc-500">
+            (multiplicadores malucos)
+          </span>
+        </summary>
+        <div className="mt-3 space-y-3">
+          {(
+            [
+              ["menHp", "Vida dos homens"],
+              ["menDmg", "Dano dos homens"],
+              ["gorHp", "Vida do monstro"],
+              ["gorDmg", "Dano do monstro"],
+            ] as const
+          ).map(([key, label]) => (
+            <div key={key} className="space-y-1">
+              <div className="flex items-baseline justify-between">
+                <Label className="text-xs text-zinc-400">{label}</Label>
+                <span className="font-mono text-xs font-bold text-purple-300">
+                  {s.lab[key].toFixed(1)}x
+                </span>
+              </div>
+              <Slider
+                min={0.1}
+                max={5}
+                step={0.1}
+                value={[s.lab[key]]}
+                onValueChange={(v) =>
+                  s.setLab({ [key]: Array.isArray(v) ? v[0] : v })
+                }
+                disabled={running}
+              />
+            </div>
+          ))}
+        </div>
+      </details>
 
       <Separator className="bg-white/10" />
 
