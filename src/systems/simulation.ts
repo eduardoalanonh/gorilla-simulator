@@ -1,12 +1,16 @@
-import type { RigidBody } from "@dimforge/rapier3d-compat";
+import type { Collider, RigidBody } from "@dimforge/rapier3d-compat";
 import {
   applyModifier,
+  ARENA_PRESETS,
+  type ArenaPreset,
   FighterStats,
   GORILLA_BASE,
   GORILLA_MODIFIERS,
+  type GorillaVariant,
   MAN_BASE,
   MAX_MEN,
   MEN_MODIFIERS,
+  PHYSICS,
 } from "@/constants/config";
 import {
   EntityState,
@@ -18,6 +22,7 @@ import { SpatialHash } from "./spatial";
 
 export interface GorillaState {
   body: RigidBody | null;
+  collider: Collider | null;
   hp: number;
   maxHp: number;
   state: number;
@@ -25,6 +30,8 @@ export interface GorillaState {
   actionT: number;
   attackCooldown: number;
   roarCooldown: number;
+  /** Rajada de energia (variantes com beam) */
+  beamCooldown: number;
   retargetTimer: number;
   targetIndex: number;
   targetX: number;
@@ -85,6 +92,10 @@ export class Simulation {
 
   manStats: FighterStats = { ...MAN_BASE };
   gorillaStats: FighterStats & { roarCooldown: number } = { ...GORILLA_BASE };
+  gorillaVariant: GorillaVariant = GORILLA_MODIFIERS[0];
+  /** Raio físico do gorila (escala com a variante) */
+  gorillaRadius = PHYSICS.gorillaRadius;
+  arena: ArenaPreset = ARENA_PRESETS[0];
 
   gorilla: GorillaState = this.freshGorilla();
 
@@ -113,6 +124,7 @@ export class Simulation {
   private freshGorilla(): GorillaState {
     return {
       body: null,
+      collider: null,
       hp: GORILLA_BASE.maxHealth,
       maxHp: GORILLA_BASE.maxHealth,
       state: EntityState.Idle,
@@ -120,6 +132,7 @@ export class Simulation {
       actionT: 0,
       attackCooldown: 1,
       roarCooldown: 6,
+      beamCooldown: 7,
       retargetTimer: 0,
       targetIndex: -1,
       targetX: 0,
@@ -151,7 +164,14 @@ export class Simulation {
   }
 
   /** Reinicia stats e contadores para uma nova batalha (corpos são reposicionados fora daqui). */
-  resetRun(count: number, menModId: string, gorillaModId: string, horde = false) {
+  resetRun(
+    count: number,
+    menModId: string,
+    gorillaModId: string,
+    horde = false,
+    arena: ArenaPreset = ARENA_PRESETS[0],
+  ) {
+    this.arena = arena;
     this.count = count;
     this.time = 0;
     this.running = false;
@@ -172,14 +192,18 @@ export class Simulation {
     const gorMod =
       GORILLA_MODIFIERS.find((m) => m.id === gorillaModId) ?? GORILLA_MODIFIERS[0];
     this.manStats = applyModifier(MAN_BASE, menMod);
+    this.gorillaVariant = gorMod;
+    this.gorillaRadius = PHYSICS.gorillaRadius * gorMod.scale;
     this.gorillaStats = {
       ...applyModifier(GORILLA_BASE, gorMod),
       roarCooldown: GORILLA_BASE.roarCooldown,
     };
 
     const prevBody = this.gorilla.body;
+    const prevCollider = this.gorilla.collider;
     this.gorilla = this.freshGorilla();
     this.gorilla.body = prevBody;
+    this.gorilla.collider = prevCollider;
     this.gorilla.hp = this.gorillaStats.maxHealth;
     this.gorilla.maxHp = this.gorillaStats.maxHealth;
 

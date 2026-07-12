@@ -11,6 +11,7 @@ import { computeSpawnRing, hordeSpawnPoint } from "@/systems/spawn";
 import { checkWinner, updateGorilla, updateMen } from "@/systems/ai";
 import { audioManager } from "@/systems/audio";
 import { fx } from "@/systems/fx";
+import { getArenaPreset } from "@/systems/rocks";
 import { EntityState } from "@/types/simulation";
 
 /**
@@ -26,6 +27,7 @@ export function SimulationLoop() {
   const trailTimer = useRef(0);
   const ending = useRef<{ winner: "gorilla" | "men"; t: number } | null>(null);
   const spawnedCount = useRef(-1);
+  const wasEnraged = useRef(false);
 
   const runId = useSimulationStore((s) => s.runId);
   const phase = useSimulationStore((s) => s.phase);
@@ -33,6 +35,7 @@ export function SimulationLoop() {
   const menModifierId = useSimulationStore((s) => s.menModifierId);
   const gorillaModifierId = useSimulationStore((s) => s.gorillaModifierId);
   const hordeMode = useSimulationStore((s) => s.hordeMode);
+  const arenaId = useSimulationStore((s) => s.arenaId);
   const muted = useSimulationStore((s) => s.muted);
 
   // (Re)spawn do mundo — debounce para o slider não recriar 1000 corpos por tick
@@ -54,9 +57,10 @@ export function SimulationLoop() {
     if (phase === "running" || phase === "ended") return;
     const delay = spawnedCount.current === -1 ? 0 : 280;
     const handle = setTimeout(() => {
-      sim.resetRun(menCount, menModifierId, gorillaModifierId, hordeMode);
+      const preset = getArenaPreset(arenaId);
+      sim.resetRun(menCount, menModifierId, gorillaModifierId, hordeMode, preset);
       spawnGorilla(world, rapier, sim);
-      spawnMen(world, rapier, sim, computeSpawnRing(menCount));
+      spawnMen(world, rapier, sim, computeSpawnRing(menCount, preset));
       spawnedCount.current = menCount;
       ending.current = null;
       useSimulationStore.getState().syncRuntime({
@@ -69,11 +73,16 @@ export function SimulationLoop() {
       });
     }, delay);
     return () => clearTimeout(handle);
-  }, [runId, menCount, menModifierId, gorillaModifierId, hordeMode, phase, world, rapier]);
+  }, [runId, menCount, menModifierId, gorillaModifierId, hordeMode, arenaId, phase, world, rapier]);
 
   useEffect(() => {
     sim.running = phase === "running";
-    if (phase === "running") audioManager.resume();
+    if (phase === "running") {
+      audioManager.resume();
+      audioManager.playVoice(sim.horde ? "survival_mode" : "fight");
+    } else if (phase === "ready") {
+      audioManager.playVoice("prepare_yourself");
+    }
   }, [phase]);
 
 
@@ -133,7 +142,7 @@ export function SimulationLoop() {
             for (let n = 0; n < missing; n++) {
               const slot = sim.findRecyclableCorpse();
               if (slot < 0) break;
-              const p = hordeSpawnPoint();
+              const p = hordeSpawnPoint(sim.arena);
               reviveMan(sim, slot, p.x, p.z);
             }
           }
@@ -190,8 +199,10 @@ export function SimulationLoop() {
         if (e.type === "killstreak") {
           store.announceStreak(e.power);
           fx.shake = Math.max(fx.shake, 0.15 + e.power * 0.03);
+          audioManager.playVoice(e.power >= 4 ? "multi_kill" : "combo");
         }
         if (e.type === "roar") fx.shake = Math.max(fx.shake, 0.5);
+        else if (e.type === "beam") fx.shake = Math.max(fx.shake, 0.6);
         else if (e.type === "slam") fx.shake = Math.max(fx.shake, 0.4);
         else if (e.type === "gorillaDie") fx.shake = Math.max(fx.shake, 0.8);
       }
@@ -200,6 +211,12 @@ export function SimulationLoop() {
 
     fx.pool?.update(dt * speedFactor);
     fx.numbers?.update(dt * speedFactor);
+
+    // Locutor anuncia a fúria do gorila
+    if (sim.gorilla.enraged !== wasEnraged.current) {
+      wasEnraged.current = sim.gorilla.enraged;
+      if (sim.gorilla.enraged) audioManager.playVoice("sudden_death");
+    }
 
     // Intensidade musical: multidão em campo, ritmo de abates ou fúria
     const recentKills = sim.recentDeaths.filter(
@@ -236,6 +253,15 @@ export function SimulationLoop() {
             deaths: sim.deadCount,
             gorillaHp: Math.max(0, sim.gorilla.hp),
           });
+          // Locutor encerra a batalha
+          if (sim.horde) audioManager.playVoice("game_over");
+          else if (w === "men") audioManager.playVoice("you_win");
+          else
+            audioManager.playVoice(
+              sim.gorilla.hp >= sim.gorilla.maxHp * 0.95
+                ? "flawless_victory"
+                : "winner",
+            );
           store.finish(w, {
             winner: w,
             mode: sim.horde ? "horde" : "classic",

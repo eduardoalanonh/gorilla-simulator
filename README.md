@@ -22,7 +22,7 @@ npm run build   # build de produção
 | Física | @react-three/rapier (Rapier WASM) |
 | Pós-processamento | @react-three/postprocessing (SSAO, Bloom, DoF, ACES, FXAA, Vignette) |
 | Estado | Zustand |
-| Áudio | three.js PositionalAudio com **sons 100% sintetizados** via WebAudio |
+| Áudio | three.js PositionalAudio — efeitos sintetizados via WebAudio + música/locutor com licença livre (ver Créditos) |
 
 ## Como funciona
 
@@ -102,3 +102,15 @@ renderer em `src/components/game/entities/` (os transforms por entidade vêm de
 O design comporta novos tipos de personagem (novos stats em `config.ts` +
 renderer em `entities/`), armas, mapas e modos de batalha sem tocar no núcleo
 da simulação.
+
+## Créditos de áudio
+
+- **Música de batalha**: ["Five Armies"](https://incompetech.com/music/royalty-free/index.html?isrc=USUAN1300036)
+  — Kevin MacLeod (incompetech.com), licença
+  [CC BY 4.0](https://creativecommons.org/licenses/by/4.0/).
+- **Vozes do locutor** (FIGHT!, MULTI KILL, SUDDEN DEATH…):
+  [Voiceover Pack: Fighter](https://kenney.nl/assets/voiceover-pack-fighter)
+  — Kenney (kenney.nl), licença
+  [CC0 1.0](https://creativecommons.org/publicdomain/zero/1.0/).
+- Todos os demais efeitos (socos, gemidos, rugido, tambores, grilos, rajada
+  de energia) são **sintetizados em tempo real** via WebAudio, sem assets.

@@ -14,6 +14,7 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import {
+  ARENA_PRESETS,
   GORILLA_MODIFIERS,
   MEN_MODIFIERS,
   MEN_PRESETS,
@@ -140,7 +141,26 @@ export function ControlPanel() {
       <Separator className="bg-white/10" />
 
       <div className="space-y-2">
-        <Label className="text-zinc-300">Homens</Label>
+        <Label className="text-zinc-300">Cenário</Label>
+        <Select
+          value={s.arenaId}
+          onValueChange={(v) => v && s.setArena(v)}
+          disabled={running}
+          items={Object.fromEntries(ARENA_PRESETS.map((p) => [p.id, p.label]))}
+        >
+          <SelectTrigger className="w-full border-white/10 bg-white/5">
+            <SelectValue />
+          </SelectTrigger>
+          <SelectContent>
+            {ARENA_PRESETS.map((p) => (
+              <SelectItem key={p.id} value={p.id}>
+                {p.label}
+              </SelectItem>
+            ))}
+          </SelectContent>
+        </Select>
+
+        <Label className="pt-1 text-zinc-300">Homens</Label>
         <Select
           value={s.menModifierId}
           onValueChange={(v) => v && s.setMenModifier(v)}

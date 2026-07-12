@@ -2,6 +2,7 @@
 
 import { create } from "zustand";
 import {
+  ARENA_PRESETS,
   GORILLA_MODIFIERS,
   MEN_MODIFIERS,
   MEN_PRESETS,
@@ -44,6 +45,7 @@ interface SimulationStore extends RuntimeStats {
   muted: boolean;
   menModifierId: string;
   gorillaModifierId: string;
+  arenaId: string;
   cameraMode: CameraMode;
 
   results: BattleResults | null;
@@ -58,6 +60,7 @@ interface SimulationStore extends RuntimeStats {
   setCameraMode: (m: CameraMode) => void;
   setMenModifier: (id: string) => void;
   setGorillaModifier: (id: string) => void;
+  setArena: (id: string) => void;
   toggleHorde: () => void;
   announceStreak: (count: number) => void;
   toggle: (
@@ -89,6 +92,7 @@ export const useSimulationStore = create<SimulationStore>()((set, get) => ({
   muted: false,
   menModifierId: "comuns",
   gorillaModifierId: "normal",
+  arenaId: "coliseu",
   cameraMode: "free",
 
   aliveMen: 0,
@@ -121,6 +125,7 @@ export const useSimulationStore = create<SimulationStore>()((set, get) => ({
       menCount: pick(MEN_PRESETS),
       menModifierId: pick(MEN_MODIFIERS).id,
       gorillaModifierId: pick(GORILLA_MODIFIERS).id,
+      arenaId: pick(ARENA_PRESETS).id,
       runId: s.phase === "ready" ? s.runId : s.runId + 1,
       phase: "ready",
       results: null,
@@ -139,6 +144,12 @@ export const useSimulationStore = create<SimulationStore>()((set, get) => ({
   setGorillaModifier: (gorillaModifierId) =>
     set((s) => ({
       gorillaModifierId,
+      runId: s.phase === "ready" ? s.runId + 1 : s.runId,
+    })),
+
+  setArena: (arenaId) =>
+    set((s) => ({
+      arenaId,
       runId: s.phase === "ready" ? s.runId + 1 : s.runId,
     })),
 

@@ -16,6 +16,7 @@ export type GorillaAction =
   | "swipe"
   | "slam"
   | "roar"
+  | "beam"
   | "die";
 
 export type Phase = "intro" | "ready" | "running" | "ended";
@@ -37,6 +38,8 @@ export interface EffectEvent {
     | "scream"
     | "damage"
     | "killstreak"
+    | "beamCharge"
+    | "beam"
     | "gorillaStep"
     | "gorillaDie";
   x: number;

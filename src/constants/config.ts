@@ -124,19 +124,94 @@ export const MEN_MODIFIERS: StatModifier[] = [
   }),
 ];
 
-export const GORILLA_MODIFIERS: StatModifier[] = [
-  mod("normal", "Gorila normal", "Um silverback saudável"),
-  mod("enfurecido", "Gorila enfurecido", "Fúria total, golpes devastadores", {
+/** Variante de gorila: stats + visual (escala, cores, cauda, aura, rajada). */
+export interface GorillaVariant extends StatModifier {
+  /** Escala visual E física (raio do colisor) */
+  scale: number;
+  fur: number;
+  back: number;
+  skin: number;
+  eyeGlow: number;
+  eyeIntensity: number;
+  /** Cauda de macaco (homenagem a um certo Saiyajin) */
+  tail?: boolean;
+  /** Cor das partículas de aura (dourado etc.) */
+  aura?: number;
+  /** Rajada de energia pela boca */
+  beam?: boolean;
+}
+
+const gorilla = (
+  id: string,
+  label: string,
+  description: string,
+  m: Partial<Omit<GorillaVariant, "id" | "label" | "description">> = {},
+): GorillaVariant => ({
+  ...mod(id, label, description),
+  scale: 1,
+  fur: 0x2e2a31,
+  back: 0x63666d,
+  skin: 0x2a2426,
+  eyeGlow: 0x4a1808,
+  eyeIntensity: 0.35,
+  ...m,
+});
+
+export const GORILLA_MODIFIERS: GorillaVariant[] = [
+  gorilla("normal", "Gorila normal", "Um silverback saudável"),
+  gorilla("enfurecido", "Gorila enfurecido", "Fúria total, golpes devastadores", {
     damage: 1.5,
     speed: 1.25,
     cooldown: 0.8,
     crit: 1.5,
+    fur: 0x3a2528,
+    eyeGlow: 0xff2200,
+    eyeIntensity: 2,
   }),
-  mod("cansado", "Gorila cansado", "Dia ruim para o rei da selva", {
+  gorilla("cansado", "Gorila cansado", "Dia ruim para o rei da selva", {
     health: 0.65,
     damage: 0.75,
     speed: 0.75,
     cooldown: 1.2,
+    fur: 0x3c3a3e,
+    back: 0x7d8087,
+  }),
+  gorilla("gigante", "Gorila GIGANTE 🏔️", "Um monstro de 7 metros", {
+    health: 3.2,
+    damage: 2.2,
+    speed: 0.95,
+    range: 1.9,
+    cooldown: 1.15,
+    scale: 2.1,
+  }),
+  gorilla("oozaru", "Macaco Lendário 🌕", "Homenagem a um Saiyajin na lua cheia", {
+    health: 5,
+    damage: 3,
+    speed: 0.85,
+    range: 2.4,
+    cooldown: 1.2,
+    scale: 2.9,
+    fur: 0x5a3d28,
+    back: 0x6e4c30,
+    skin: 0x3a2a20,
+    eyeGlow: 0xff1a00,
+    eyeIntensity: 4,
+    tail: true,
+    beam: true,
+  }),
+  gorilla("dourado", "Gorila Dourado ⚡", "Cabelo dourado, poder além dos limites", {
+    health: 1.6,
+    damage: 1.4,
+    speed: 1.55,
+    cooldown: 0.55,
+    crit: 2,
+    scale: 1.25,
+    fur: 0xc9971d,
+    back: 0xe8c04a,
+    skin: 0x4a3a1a,
+    eyeGlow: 0x6fffd0,
+    eyeIntensity: 3,
+    aura: 0xffd75e,
   }),
 ];
 
@@ -155,16 +230,138 @@ export function applyModifier(base: FighterStats, m: StatModifier): FighterStats
   };
 }
 
-export const ARENA = {
-  radius: 58,
-  wallSegments: 26,
-  wallHeight: 3,
-  groundY: 0,
-  bigRocks: 9,
-  smallRocks: 26,
-  grassTufts: 220,
-  torches: 10,
-};
+/** Preset de cenário: geometria da arena + clima/iluminação. */
+export interface ArenaPreset {
+  id: string;
+  label: string;
+  description: string;
+  radius: number;
+  /** 0 = sem muralha (campo aberto) */
+  wallSegments: number;
+  wallHeight: number;
+  bigRocks: number;
+  smallRocks: number;
+  grassTufts: number;
+  torches: number;
+  fogDensity: number;
+  fogColor: string;
+  sky: {
+    top: string;
+    mid: string;
+    horizon: string;
+    sunColor: string;
+    sunIntensity: number;
+    ambientIntensity: number;
+    hemiIntensity: number;
+    /** Lua cheia gigante no céu */
+    moon?: boolean;
+  };
+  /** Tinta do chão (multiplica a textura de terra) */
+  groundTint: string;
+}
+
+export const ARENA_PRESETS: ArenaPreset[] = [
+  {
+    id: "coliseu",
+    label: "Coliseu Clássico 🏟️",
+    description: "A arena original ao pôr do sol",
+    radius: 58,
+    wallSegments: 26,
+    wallHeight: 3,
+    bigRocks: 9,
+    smallRocks: 26,
+    grassTufts: 220,
+    torches: 10,
+    fogDensity: 0.0062,
+    fogColor: "#1c1425",
+    sky: {
+      top: "#0d1026",
+      mid: "#3b2544",
+      horizon: "#c96a3a",
+      sunColor: "#ffb168",
+      sunIntensity: 3.4,
+      ambientIntensity: 0.38,
+      hemiIntensity: 0.55,
+    },
+    groundTint: "#ffffff",
+  },
+  {
+    id: "poco",
+    label: "O Poço 🕳️",
+    description: "Apertado, sem escapatória — caos imediato",
+    radius: 22,
+    wallSegments: 16,
+    wallHeight: 10,
+    bigRocks: 2,
+    smallRocks: 8,
+    grassTufts: 20,
+    torches: 8,
+    fogDensity: 0.011,
+    fogColor: "#221528",
+    sky: {
+      top: "#0a0c1e",
+      mid: "#33203c",
+      horizon: "#b05a30",
+      sunColor: "#ff9c50",
+      sunIntensity: 2.8,
+      ambientIntensity: 0.34,
+      hemiIntensity: 0.5,
+    },
+    groundTint: "#d8c8b8",
+  },
+  {
+    id: "planicie",
+    label: "Planície Aberta 🌾",
+    description: "Enorme, sem muros — dá para correr (e fugir)",
+    radius: 100,
+    wallSegments: 0,
+    wallHeight: 0,
+    bigRocks: 16,
+    smallRocks: 60,
+    grassTufts: 700,
+    torches: 0,
+    fogDensity: 0.0032,
+    fogColor: "#2a1e28",
+    sky: {
+      top: "#141336",
+      mid: "#4a2c4e",
+      horizon: "#d8813f",
+      sunColor: "#ffc078",
+      sunIntensity: 4.2,
+      ambientIntensity: 0.45,
+      hemiIntensity: 0.65,
+    },
+    groundTint: "#ffffff",
+  },
+  {
+    id: "luacheia",
+    label: "Lua Cheia 🌕",
+    description: "Noite azul, lua gigante — cuidado com macacos",
+    radius: 58,
+    wallSegments: 26,
+    wallHeight: 3,
+    bigRocks: 9,
+    smallRocks: 26,
+    grassTufts: 120,
+    torches: 12,
+    fogDensity: 0.008,
+    fogColor: "#0e1220",
+    sky: {
+      top: "#04060f",
+      mid: "#0d1730",
+      horizon: "#28405c",
+      sunColor: "#aabfff",
+      sunIntensity: 2.4,
+      ambientIntensity: 0.42,
+      hemiIntensity: 0.5,
+      moon: true,
+    },
+    groundTint: "#93a2c4",
+  },
+];
+
+/** Compatibilidade: valores do preset clássico para consumidores estáticos. */
+export const ARENA = ARENA_PRESETS[0];
 
 export const PHYSICS = {
   gravity: -16,

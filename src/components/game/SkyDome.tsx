@@ -1,10 +1,17 @@
 "use client";
 
-import { useMemo } from "react";
+import { useEffect, useMemo } from "react";
 import * as THREE from "three";
+import { getArenaPreset } from "@/systems/rocks";
+import { useSimulationStore } from "@/store/simulationStore";
 
-/** Céu de crepúsculo com gradiente, brilho do sol baixo e estrelas procedurais. */
+const SUN_DIR = new THREE.Vector3(-0.62, 0.16, -0.42).normalize();
+
+/** Céu por cenário: gradiente, brilho do sol/lua e estrelas procedurais. */
 export function SkyDome() {
+  const arenaId = useSimulationStore((s) => s.arenaId);
+  const preset = getArenaPreset(arenaId);
+
   const material = useMemo(
     () =>
       new THREE.ShaderMaterial({
@@ -15,7 +22,8 @@ export function SkyDome() {
           topColor: { value: new THREE.Color("#0d1026") },
           midColor: { value: new THREE.Color("#3b2544") },
           horizonColor: { value: new THREE.Color("#c96a3a") },
-          sunDir: { value: new THREE.Vector3(-0.62, 0.16, -0.42).normalize() },
+          sunDir: { value: SUN_DIR.clone() },
+          starBoost: { value: 1 },
         },
         vertexShader: /* glsl */ `
           varying vec3 vDir;
@@ -29,6 +37,7 @@ export function SkyDome() {
           uniform vec3 midColor;
           uniform vec3 horizonColor;
           uniform vec3 sunDir;
+          uniform float starBoost;
           varying vec3 vDir;
 
           float hash(vec3 p) {
@@ -42,14 +51,14 @@ export function SkyDome() {
             vec3 sky = mix(horizonColor, midColor, smoothstep(0.0, 0.22, h));
             sky = mix(sky, topColor, smoothstep(0.18, 0.65, h));
 
-            // Glow quente ao redor do sol poente
+            // Glow quente ao redor do sol poente (ou frio, na lua)
             float sunAmount = max(dot(dir, sunDir), 0.0);
-            sky += vec3(1.0, 0.55, 0.25) * pow(sunAmount, 18.0) * 0.9;
-            sky += vec3(1.0, 0.75, 0.4) * pow(sunAmount, 4.0) * 0.22;
+            sky += horizonColor * pow(sunAmount, 18.0) * 0.9;
+            sky += horizonColor * pow(sunAmount, 4.0) * 0.22;
 
             // Estrelas no alto
             vec3 grid = floor(dir * 220.0);
-            float star = step(0.9985, hash(grid));
+            float star = step(1.0 - 0.0015 * starBoost, hash(grid));
             float twinkle = 0.6 + 0.4 * hash(grid + 1.0);
             sky += vec3(star) * twinkle * smoothstep(0.25, 0.6, h) * 0.8;
 
@@ -60,9 +69,32 @@ export function SkyDome() {
     [],
   );
 
+  useEffect(() => {
+    material.uniforms.topColor.value.set(preset.sky.top);
+    material.uniforms.midColor.value.set(preset.sky.mid);
+    material.uniforms.horizonColor.value.set(preset.sky.horizon);
+    material.uniforms.starBoost.value = preset.sky.moon ? 3 : 1;
+  }, [material, preset]);
+
+  // Posição da lua: na direção do "sol" (fonte de luz), alto no céu
+  const moonPos = useMemo(() => {
+    const d = SUN_DIR.clone();
+    d.y = 0.42;
+    d.normalize().multiplyScalar(400);
+    return d;
+  }, []);
+
   return (
-    <mesh material={material} frustumCulled={false} renderOrder={-10}>
-      <sphereGeometry args={[450, 32, 20]} />
-    </mesh>
+    <group>
+      <mesh material={material} frustumCulled={false} renderOrder={-10}>
+        <sphereGeometry args={[450, 32, 20]} />
+      </mesh>
+      {preset.sky.moon && (
+        <mesh position={moonPos} frustumCulled={false} renderOrder={-9}>
+          <sphereGeometry args={[26, 24, 18]} />
+          <meshBasicMaterial color="#e8ecff" toneMapped={false} fog={false} />
+        </mesh>
+      )}
+    </group>
   );
 }

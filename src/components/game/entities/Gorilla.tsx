@@ -1,44 +1,73 @@
 "use client";
 
-import { useRef } from "react";
+import { useEffect, useMemo, useRef } from "react";
 import * as THREE from "three";
 import { useFrame } from "@react-three/fiber";
-import { COLORS, PHYSICS } from "@/constants/config";
+import { GORILLA_MODIFIERS } from "@/constants/config";
+import { useSimulationStore } from "@/store/simulationStore";
 import { sim } from "@/systems/simulation";
+import { fx } from "@/systems/fx";
 import { damp, lerp } from "@/utils/random";
 
-const FUR = new THREE.MeshStandardMaterial({
-  color: COLORS.gorillaFur,
-  roughness: 0.92,
-  metalness: 0.05,
-});
-const SILVER = new THREE.MeshStandardMaterial({
-  color: COLORS.gorillaSilver,
-  roughness: 0.95,
-});
-const SKIN = new THREE.MeshStandardMaterial({
-  color: COLORS.gorillaSkin,
-  roughness: 0.6,
-});
-const EYE = new THREE.MeshStandardMaterial({
-  color: "#1a0f0a",
-  roughness: 0.2,
-  emissive: "#4a1808",
-  emissiveIntensity: 0.35,
-});
+const easeOut = (t: number) => 1 - (1 - t) * (1 - t);
 
 /**
- * Gorila procedural (sem assets externos) com animação por pose:
- * idle, galope, swipe, slam, rugido com batida no peito e morte.
+ * Gorila procedural com variantes (normal, gigante, Macaco Lendário com
+ * cauda + rajada de energia, dourado com aura) e animação por pose.
  */
 export function Gorilla() {
+  const gorillaModifierId = useSimulationStore((s) => s.gorillaModifierId);
+  const variant =
+    GORILLA_MODIFIERS.find((m) => m.id === gorillaModifierId) ??
+    GORILLA_MODIFIERS[0];
+
   const root = useRef<THREE.Group>(null);
   const tilt = useRef<THREE.Group>(null);
   const chest = useRef<THREE.Group>(null);
   const head = useRef<THREE.Group>(null);
   const armL = useRef<THREE.Group>(null);
   const armR = useRef<THREE.Group>(null);
+  const tail = useRef<THREE.Group>(null);
+  const mouthGlow = useRef<THREE.Mesh>(null);
+  const beam = useRef<THREE.Mesh>(null);
   const gallop = useRef(0);
+  const auraTimer = useRef(0);
+
+  const mats = useMemo(() => {
+    const fur = new THREE.MeshStandardMaterial({
+      color: variant.fur,
+      roughness: 0.92,
+      metalness: variant.aura ? 0.35 : 0.05,
+    });
+    const back = new THREE.MeshStandardMaterial({
+      color: variant.back,
+      roughness: 0.95,
+    });
+    const skin = new THREE.MeshStandardMaterial({
+      color: variant.skin,
+      roughness: 0.6,
+    });
+    const eye = new THREE.MeshStandardMaterial({
+      color: "#1a0f0a",
+      roughness: 0.2,
+      emissive: variant.eyeGlow,
+      emissiveIntensity: variant.eyeIntensity,
+    });
+    const energy = new THREE.MeshBasicMaterial({
+      color: "#aee6ff",
+      transparent: true,
+      opacity: 0.9,
+      toneMapped: false,
+    });
+    return { fur, back, skin, eye, energy };
+  }, [variant]);
+
+  useEffect(() => {
+    const created = mats;
+    return () => {
+      Object.values(created).forEach((m) => m.dispose());
+    };
+  }, [mats]);
 
   useFrame((state, delta) => {
     const g = sim.gorilla;
@@ -46,18 +75,39 @@ export function Gorilla() {
     if (!body || !root.current) return;
 
     const p = body.translation();
-    root.current.position.set(p.x, p.y - PHYSICS.gorillaRadius, p.z);
+    root.current.position.set(p.x, p.y - sim.gorillaRadius, p.z);
     root.current.rotation.y = g.facing;
 
-    // Fúria: olhos em brasa
-    EYE.emissiveIntensity = g.enraged
+    // Fúria: olhos em brasa (soma ao brilho base da variante)
+    mats.eye.emissiveIntensity = g.enraged
       ? 3 + Math.sin(state.clock.elapsedTime * 10) * 0.8
-      : 0.35;
+      : variant.eyeIntensity;
 
     const clock = state.clock.elapsedTime;
     const v = body.linvel();
     const speed = Math.sqrt(v.x * v.x + v.z * v.z);
     gallop.current += delta * (4 + speed * 1.6);
+
+    // Aura de energia (Gorila Dourado)
+    if (variant.aura && fx.pool && sim.running && g.hp > 0) {
+      auraTimer.current -= delta;
+      if (auraTimer.current <= 0) {
+        auraTimer.current = 0.07;
+        const a = Math.random() * Math.PI * 2;
+        const r = sim.gorillaRadius * (0.5 + Math.random() * 0.7);
+        fx.pool.spawn(p.x + Math.cos(a) * r, p.y - sim.gorillaRadius + 0.3, p.z + Math.sin(a) * r, {
+          count: 1,
+          speed: 0.3,
+          up: 2.6,
+          spread: 0.1,
+          size: 0.16,
+          life: 0.7,
+          gravity: -0.4,
+          color: variant.aura,
+          colorJitter: 0.25,
+        });
+      }
+    }
 
     // Pose alvo
     let tiltX = 0.12;
@@ -79,6 +129,16 @@ export function Gorilla() {
       armLZ = 0.7 * dt01;
       armRZ = -0.7 * dt01;
       headX = 0.5 * dt01;
+    } else if (g.action === "beam") {
+      // Carrega com a cabeça erguida, dispara com recuo
+      const charging = t < 0.85;
+      const chargeK = Math.min(t / 0.85, 1);
+      tiltX = charging ? lerp(0.12, -0.25, easeOut(chargeK)) : 0.05;
+      armLX = armRX = -1.1;
+      armLZ = 0.5;
+      armRZ = -0.5;
+      headX = charging ? -0.5 * chargeK : 0.18;
+      chestScale = 1 + chargeK * 0.08;
     } else if (g.action === "roar") {
       // Empina, cabeça pra cima, bate no peito alternando os punhos
       const rise = Math.min(t / 0.25, 1);
@@ -124,6 +184,34 @@ export function Gorilla() {
       headX = Math.sin(clock * 0.6) * 0.12;
     }
 
+    // Visual da rajada: brilho na boca (carga) + feixe (disparo)
+    if (mouthGlow.current && beam.current) {
+      if (g.action === "beam") {
+        const chargeK = Math.min(t / 0.85, 1);
+        const firing = t >= 0.85 && t < 1.7;
+        mouthGlow.current.visible = true;
+        mouthGlow.current.scale.setScalar(
+          firing ? 1.4 + Math.sin(clock * 40) * 0.2 : 0.2 + chargeK * 1.1,
+        );
+        beam.current.visible = firing;
+        if (firing) {
+          const pulse = 1 + Math.sin(clock * 50) * 0.18;
+          beam.current.scale.set(pulse, 1, pulse);
+          const fade = t > 1.45 ? 1 - (t - 1.45) / 0.25 : 1;
+          mats.energy.opacity = 0.9 * fade;
+        }
+      } else {
+        mouthGlow.current.visible = false;
+        beam.current.visible = false;
+      }
+    }
+
+    // Cauda: balanço constante, chicoteia quando corre
+    if (tail.current) {
+      tail.current.rotation.y = Math.sin(clock * 3.2) * 0.5;
+      tail.current.rotation.x = -0.6 + Math.sin(clock * 2.1) * 0.2 + speed * 0.03;
+    }
+
     const d = 1 - Math.exp(-14 * delta);
     if (tilt.current) {
       tilt.current.rotation.x = lerp(tilt.current.rotation.x, tiltX, d);
@@ -145,87 +233,118 @@ export function Gorilla() {
     }
   });
 
+  const scale = 1.18 * variant.scale;
+  // Comprimento do feixe em unidades locais (36m no mundo)
+  const beamLen = 36 / scale;
+
   return (
-    <group ref={root} scale={1.18}>
+    <group ref={root} scale={scale} key={variant.id}>
       <group ref={tilt}>
         {/* Quadril + pernas curtas */}
-        <mesh position={[0, 0.78, -0.18]} castShadow material={FUR}>
+        <mesh position={[0, 0.78, -0.18]} castShadow material={mats.fur}>
           <sphereGeometry args={[0.55, 20, 16]} />
         </mesh>
-        <mesh position={[-0.32, 0.38, -0.18]} castShadow material={FUR}>
+        <mesh position={[-0.32, 0.38, -0.18]} castShadow material={mats.fur}>
           <cylinderGeometry args={[0.19, 0.23, 0.75, 10]} />
         </mesh>
-        <mesh position={[0.32, 0.38, -0.18]} castShadow material={FUR}>
+        <mesh position={[0.32, 0.38, -0.18]} castShadow material={mats.fur}>
           <cylinderGeometry args={[0.19, 0.23, 0.75, 10]} />
         </mesh>
-        <mesh position={[-0.34, 0.08, -0.08]} castShadow material={SKIN}>
+        <mesh position={[-0.34, 0.08, -0.08]} castShadow material={mats.skin}>
           <boxGeometry args={[0.3, 0.14, 0.42]} />
         </mesh>
-        <mesh position={[0.34, 0.08, -0.08]} castShadow material={SKIN}>
+        <mesh position={[0.34, 0.08, -0.08]} castShadow material={mats.skin}>
           <boxGeometry args={[0.3, 0.14, 0.42]} />
         </mesh>
 
+        {/* Cauda (Macaco Lendário) */}
+        {variant.tail && (
+          <group ref={tail} position={[0, 0.85, -0.62]}>
+            <mesh position={[0, 0.25, -0.28]} rotation={[0.7, 0, 0]} castShadow material={mats.fur}>
+              <cylinderGeometry args={[0.06, 0.11, 0.9, 8]} />
+            </mesh>
+            <mesh position={[0, 0.62, -0.52]} castShadow material={mats.fur}>
+              <sphereGeometry args={[0.11, 8, 6]} />
+            </mesh>
+          </group>
+        )}
+
         {/* Peito enorme */}
         <group ref={chest} position={[0, 1.32, 0.12]}>
-          <mesh castShadow material={FUR}>
+          <mesh castShadow material={mats.fur}>
             <sphereGeometry args={[0.78, 24, 18]} />
           </mesh>
           {/* Peitoral de pele */}
-          <mesh position={[0, -0.05, 0.52]} castShadow material={SKIN}>
+          <mesh position={[0, -0.05, 0.52]} castShadow material={mats.skin}>
             <sphereGeometry args={[0.42, 16, 12]} />
           </mesh>
           {/* Costas prateadas (silverback) */}
           <mesh
             position={[0, -0.02, -0.32]}
             scale={[0.95, 0.72, 0.62]}
-            material={SILVER}
+            material={mats.back}
           >
             <sphereGeometry args={[0.66, 20, 14]} />
           </mesh>
 
           {/* Cabeça */}
           <group ref={head} position={[0, 0.62, 0.42]}>
-            <mesh castShadow material={FUR}>
+            <mesh castShadow material={mats.fur}>
               <sphereGeometry args={[0.36, 20, 16]} />
             </mesh>
             {/* Crista sagital */}
-            <mesh position={[0, 0.28, -0.05]} castShadow material={FUR}>
+            <mesh position={[0, 0.28, -0.05]} castShadow material={mats.fur}>
               <sphereGeometry args={[0.2, 12, 10]} />
             </mesh>
             {/* Face */}
-            <mesh position={[0, -0.02, 0.28]} material={SKIN}>
+            <mesh position={[0, -0.02, 0.28]} material={mats.skin}>
               <sphereGeometry args={[0.22, 16, 12]} />
             </mesh>
             {/* Focinho */}
-            <mesh position={[0, -0.14, 0.34]} castShadow material={SKIN}>
+            <mesh position={[0, -0.14, 0.34]} castShadow material={mats.skin}>
               <boxGeometry args={[0.26, 0.18, 0.18]} />
             </mesh>
             {/* Sobrancelha */}
-            <mesh position={[0, 0.12, 0.3]} material={FUR}>
+            <mesh position={[0, 0.12, 0.3]} material={mats.fur}>
               <boxGeometry args={[0.34, 0.1, 0.12]} />
             </mesh>
-            <mesh position={[-0.09, 0.04, 0.42]} material={EYE}>
+            <mesh position={[-0.09, 0.04, 0.42]} material={mats.eye}>
               <sphereGeometry args={[0.035, 8, 6]} />
             </mesh>
-            <mesh position={[0.09, 0.04, 0.42]} material={EYE}>
+            <mesh position={[0.09, 0.04, 0.42]} material={mats.eye}>
               <sphereGeometry args={[0.035, 8, 6]} />
+            </mesh>
+            {/* Brilho na boca (carga da rajada) */}
+            <mesh ref={mouthGlow} position={[0, -0.16, 0.48]} visible={false} material={mats.energy}>
+              <sphereGeometry args={[0.14, 10, 8]} />
             </mesh>
           </group>
 
+          {/* Feixe de energia — horizontal, a partir da boca */}
+          <mesh
+            ref={beam}
+            position={[0, 0.45, 0.6 + beamLen / 2]}
+            rotation={[Math.PI / 2, 0, 0]}
+            visible={false}
+            material={mats.energy}
+          >
+            <cylinderGeometry args={[0.32, 0.45, beamLen, 12, 1, true]} />
+          </mesh>
+
           {/* Braços longos — pivô no ombro */}
           <group ref={armL} position={[-0.72, 0.28, 0.08]}>
-            <mesh position={[0, -0.55, 0]} castShadow material={FUR}>
+            <mesh position={[0, -0.55, 0]} castShadow material={mats.fur}>
               <cylinderGeometry args={[0.17, 0.24, 1.15, 10]} />
             </mesh>
-            <mesh position={[0, -1.18, 0]} castShadow material={SKIN}>
+            <mesh position={[0, -1.18, 0]} castShadow material={mats.skin}>
               <sphereGeometry args={[0.24, 12, 10]} />
             </mesh>
           </group>
           <group ref={armR} position={[0.72, 0.28, 0.08]}>
-            <mesh position={[0, -0.55, 0]} castShadow material={FUR}>
+            <mesh position={[0, -0.55, 0]} castShadow material={mats.fur}>
               <cylinderGeometry args={[0.17, 0.24, 1.15, 10]} />
             </mesh>
-            <mesh position={[0, -1.18, 0]} castShadow material={SKIN}>
+            <mesh position={[0, -1.18, 0]} castShadow material={mats.skin}>
               <sphereGeometry args={[0.24, 12, 10]} />
             </mesh>
           </group>
@@ -234,5 +353,3 @@ export function Gorilla() {
     </group>
   );
 }
-
-const easeOut = (t: number) => 1 - (1 - t) * (1 - t);

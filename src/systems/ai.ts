@@ -9,7 +9,7 @@ const TWO_PI = Math.PI * 2;
 
 /** Distância (do centro do gorila) em que um homem consegue golpear. */
 export function manAttackDistance(sim: Simulation) {
-  return PHYSICS.gorillaRadius + sim.manStats.attackRange;
+  return sim.gorillaRadius + sim.manStats.attackRange;
 }
 
 /** Distância (do centro do gorila) em que o gorila alcança um homem. */
@@ -125,7 +125,7 @@ export function updateMen(sim: Simulation, dt: number) {
 
     if (state === EntityState.Running || state === EntityState.Searching) {
       // Ponto alvo: posição no anel de cerco ao redor do gorila
-      const ringR = PHYSICS.gorillaRadius + stats.attackRange * 0.62;
+      const ringR = sim.gorillaRadius + stats.attackRange * 0.62;
       const tx = gPos.x + Math.cos(sim.angleOffset[i]) * ringR;
       const tz = gPos.z + Math.sin(sim.angleOffset[i]) * ringR;
       let mx = tx - sim.posX[i];
@@ -256,27 +256,59 @@ export function updateGorilla(sim: Simulation, dt: number) {
     }
   }
 
-  // Ação em andamento (swipe / slam / roar)
-  if (g.action === "swipe" || g.action === "slam" || g.action === "roar") {
+  g.beamCooldown -= dt;
+
+  // Ação em andamento (swipe / slam / roar / beam)
+  if (
+    g.action === "swipe" ||
+    g.action === "slam" ||
+    g.action === "roar" ||
+    g.action === "beam"
+  ) {
     const prevT = g.actionT;
     g.actionT += dt;
     const isSlam = g.action === "slam";
     const hitTime = isSlam ? 0.38 : 0.24;
-    const duration = g.action === "roar" ? 1.7 : isSlam ? 0.85 : 0.6;
+    const duration =
+      g.action === "beam" ? 1.9 : g.action === "roar" ? 1.7 : isSlam ? 0.85 : 0.6;
 
     body.setLinvel({ x: 0, y: body.linvel().y, z: 0 }, true);
 
-    if (g.action !== "roar" && prevT < hitTime && g.actionT >= hitTime) {
-      applyGorillaBlow(sim, pos.x, pos.z, isSlam);
-    }
-    if (g.action === "roar" && prevT < 0.25 && g.actionT >= 0.25) {
-      applyRoar(sim, pos.x, pos.z);
+    if (g.action === "swipe" || g.action === "slam") {
+      if (prevT < hitTime && g.actionT >= hitTime) {
+        applyGorillaBlow(sim, pos.x, pos.z, isSlam);
+      }
+    } else if (g.action === "roar") {
+      if (prevT < 0.25 && g.actionT >= 0.25) applyRoar(sim, pos.x, pos.z);
+    } else if (g.action === "beam") {
+      // Carrega (0–0.8s), dispara em 0.85s
+      if (prevT < 0.85 && g.actionT >= 0.85) applyBeam(sim, pos.x, pos.z);
     }
     if (g.actionT >= duration) {
       g.action = "idle";
       g.actionT = 0;
       g.state = EntityState.Searching;
     }
+    return;
+  }
+
+  // Rajada de energia (Macaco Lendário): especial periódico que vaporiza
+  // um corredor de homens na direção do alvo — cercado ou não
+  if (
+    sim.gorillaVariant.beam &&
+    g.beamCooldown <= 0 &&
+    g.targetIndex >= 0 &&
+    sim.aliveCount >= 3
+  ) {
+    const bx = sim.posX[g.targetIndex] - pos.x;
+    const bz = sim.posZ[g.targetIndex] - pos.z;
+    g.beamCooldown = 12 + Math.random() * 6;
+    g.facing = Math.atan2(bx, bz);
+    g.action = "beam";
+    g.actionT = 0;
+    g.state = EntityState.Attacking;
+    const mouthY = pos.y + sim.gorillaRadius * 0.9;
+    sim.emit("beamCharge", pos.x, mouthY, pos.z, 1);
     return;
   }
 
@@ -402,6 +434,38 @@ function applyGorillaBlow(sim: Simulation, gx: number, gz: number, slam: boolean
   // Vários abatidos num golpe só → kill streak
   const kills = sim.deadCount - deadBefore;
   if (kills >= 2) sim.emit("killstreak", gx, 2, gz, kills);
+}
+
+/** Rajada de energia: dano massivo num corredor à frente do gorila. */
+function applyBeam(sim: Simulation, gx: number, gz: number) {
+  const g = sim.gorilla;
+  const fx = Math.sin(g.facing);
+  const fz = Math.cos(g.facing);
+  const length = 36;
+  const halfWidth = 2.6;
+  const start = sim.gorillaRadius * 0.6;
+  let hits = 0;
+
+  for (let j = 0; j < sim.count; j++) {
+    if (sim.state[j] === EntityState.Dead || hits >= 40) continue;
+    const ox = sim.posX[j] - gx;
+    const oz = sim.posZ[j] - gz;
+    const forward = ox * fx + oz * fz;
+    if (forward < start || forward > length) continue;
+    const perp = Math.abs(ox * fz - oz * fx);
+    if (perp > halfWidth) continue;
+    // Knockback ao longo do feixe, arremesso alto
+    gorillaHitMan(sim, j, fx, fz, 2.4);
+    hits++;
+  }
+
+  const mouthY = sim.gorillaRadius * 1.2;
+  sim.emit("beam", gx, mouthY, gz, 2);
+  // Impactos no chão ao longo do corredor
+  for (let k = 1; k <= 5; k++) {
+    const d = start + (k / 5) * (length - start);
+    sim.emit("impact", gx + fx * d, 0.3, gz + fz * d, 1.4);
+  }
 }
 
 /** Rugido: medo + empurrão leve nos homens próximos. */

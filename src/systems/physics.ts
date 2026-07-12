@@ -61,8 +61,11 @@ export function spawnMen(
 }
 
 export function spawnGorilla(world: World, rapier: RapierModule, sim: Simulation) {
-  const r = PHYSICS.gorillaRadius;
+  // Raio escala com a variante (gigante/oozaru são fisicamente maiores)
+  const r = sim.gorillaRadius;
+  const mass = sim.gorillaStats.weightKg * 3 * sim.gorillaVariant.scale;
   let body = sim.gorilla.body;
+
   if (!body) {
     const desc = rapier.RigidBodyDesc.dynamic()
       .setTranslation(0, r, 0)
@@ -70,13 +73,22 @@ export function spawnGorilla(world: World, rapier: RapierModule, sim: Simulation
       .enabledRotations(false, false, false)
       .setCcdEnabled(true);
     body = world.createRigidBody(desc);
-    const colDesc = rapier.ColliderDesc.ball(r)
-      .setMass(sim.gorillaStats.weightKg * 3)
-      .setFriction(0.8)
-      .setRestitution(0.02);
-    world.createCollider(colDesc, body);
     sim.gorilla.body = body;
   }
+
+  // Colisor é recriado quando a variante muda de tamanho
+  const current = sim.gorilla.collider;
+  if (!current || Math.abs(current.radius() - r) > 1e-3) {
+    if (current) world.removeCollider(current, false);
+    const colDesc = rapier.ColliderDesc.ball(r)
+      .setMass(mass)
+      .setFriction(0.8)
+      .setRestitution(0.02);
+    sim.gorilla.collider = world.createCollider(colDesc, body);
+  } else {
+    current.setMass(mass);
+  }
+
   body.setEnabled(true);
   body.setTranslation({ x: 0, y: r, z: 0 }, true);
   body.setLinvel({ x: 0, y: 0, z: 0 }, false);

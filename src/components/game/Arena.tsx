@@ -4,10 +4,10 @@ import { useMemo, useRef } from "react";
 import * as THREE from "three";
 import { useFrame } from "@react-three/fiber";
 import { CuboidCollider, BallCollider, RigidBody } from "@react-three/rapier";
-import { ARENA } from "@/constants/config";
 import { makeDirtTexture } from "@/utils/textures";
 import { mulberry32 } from "@/utils/random";
-import { BIG_ROCKS } from "@/systems/rocks";
+import { getArenaPreset, getBigRocks } from "@/systems/rocks";
+import { useSimulationStore } from "@/store/simulationStore";
 
 function deformedRock(seed: number, detail = 1) {
   const geo = new THREE.IcosahedronGeometry(1, detail);
@@ -23,21 +23,23 @@ function deformedRock(seed: number, detail = 1) {
 
 /** Arena circular: terra batida, pedras, muralha rochosa, vegetação e tochas. */
 export function Arena() {
+  const arenaId = useSimulationStore((s) => s.arenaId);
+  const preset = getArenaPreset(arenaId);
   const dirtTexture = useMemo(() => makeDirtTexture(1024, 42), []);
-  const R = ARENA.radius;
+  const R = preset.radius;
 
-  const bigRocks = BIG_ROCKS;
+  const bigRocks = getBigRocks(preset);
 
   const rockGeos = useMemo(
     () => bigRocks.map((_, i) => deformedRock(100 + i, 1)),
     [bigRocks],
   );
 
-  // Muralha: blocos de rocha formando o perímetro
+  // Muralha: blocos de rocha formando o perímetro (0 = campo aberto)
   const wallBlocks = useMemo(() => {
     const rng = mulberry32(777);
     const blocks: { x: number; z: number; ry: number; s: [number, number, number] }[] = [];
-    const n = ARENA.wallSegments;
+    const n = preset.wallSegments;
     for (let i = 0; i < n; i++) {
       const a = (i / n) * Math.PI * 2;
       blocks.push({
@@ -45,14 +47,14 @@ export function Arena() {
         z: Math.sin(a) * (R + 2.5),
         ry: a + (rng() - 0.5) * 0.4,
         s: [
-          4.5 + rng() * 3,
-          ARENA.wallHeight + rng() * 3.5,
+          4.5 + rng() * 3 + (R > 60 ? 2 : 0),
+          preset.wallHeight + rng() * 3.5,
           3 + rng() * 2,
         ],
       });
     }
     return blocks;
-  }, [R]);
+  }, [R, preset.wallSegments, preset.wallHeight]);
 
   const wallGeo = useMemo(() => deformedRock(555, 1), []);
 
@@ -66,12 +68,12 @@ export function Arena() {
       roughness: 1,
       side: THREE.DoubleSide,
     });
-    const mesh = new THREE.InstancedMesh(geo, mat, ARENA.grassTufts);
+    const mesh = new THREE.InstancedMesh(geo, mat, preset.grassTufts);
     const m = new THREE.Matrix4();
     const q = new THREE.Quaternion();
     const eul = new THREE.Euler();
     const c = new THREE.Color();
-    for (let i = 0; i < ARENA.grassTufts; i++) {
+    for (let i = 0; i < preset.grassTufts; i++) {
       const a = rng() * Math.PI * 2;
       const dist = 10 + Math.sqrt(rng()) * (R - 13);
       eul.set((rng() - 0.5) * 0.35, rng() * Math.PI, (rng() - 0.5) * 0.35);
@@ -91,17 +93,17 @@ export function Arena() {
     }
     mesh.receiveShadow = true;
     return mesh;
-  }, [R]);
+  }, [R, preset.grassTufts]);
 
   // Pedrinhas espalhadas (sem colisor)
   const pebbleMesh = useMemo(() => {
     const rng = mulberry32(31415);
     const geo = deformedRock(9, 0);
     const mat = new THREE.MeshStandardMaterial({ color: "#5d554b", roughness: 0.95 });
-    const mesh = new THREE.InstancedMesh(geo, mat, ARENA.smallRocks);
+    const mesh = new THREE.InstancedMesh(geo, mat, preset.smallRocks);
     const m = new THREE.Matrix4();
     const q = new THREE.Quaternion();
-    for (let i = 0; i < ARENA.smallRocks; i++) {
+    for (let i = 0; i < preset.smallRocks; i++) {
       const a = rng() * Math.PI * 2;
       const dist = 8 + Math.sqrt(rng()) * (R - 11);
       const s = 0.15 + rng() * 0.4;
@@ -116,12 +118,12 @@ export function Arena() {
     mesh.castShadow = true;
     mesh.receiveShadow = true;
     return mesh;
-  }, [R]);
+  }, [R, preset.smallRocks]);
 
   const torches = useMemo(() => {
     const list: { x: number; z: number; withLight: boolean }[] = [];
-    for (let i = 0; i < ARENA.torches; i++) {
-      const a = (i / ARENA.torches) * Math.PI * 2 + 0.31;
+    for (let i = 0; i < preset.torches; i++) {
+      const a = (i / preset.torches) * Math.PI * 2 + 0.31;
       list.push({
         x: Math.cos(a) * (R - 2.2),
         z: Math.sin(a) * (R - 2.2),
@@ -129,10 +131,10 @@ export function Arena() {
       });
     }
     return list;
-  }, [R]);
+  }, [R, preset.torches]);
 
   return (
-    <group>
+    <group key={preset.id}>
       {/* Chão + colisor */}
       <RigidBody type="fixed" colliders={false}>
         <CuboidCollider args={[R + 30, 1, R + 30]} position={[0, -1, 0]} />
@@ -149,7 +151,12 @@ export function Arena() {
 
       <mesh rotation={[-Math.PI / 2, 0, 0]} receiveShadow>
         <circleGeometry args={[R + 1.5, 72]} />
-        <meshStandardMaterial map={dirtTexture} roughness={0.96} metalness={0} />
+        <meshStandardMaterial
+          map={dirtTexture}
+          color={preset.groundTint}
+          roughness={0.96}
+          metalness={0}
+        />
       </mesh>
 
       {/* Terreno externo escuro (horizonte) */}

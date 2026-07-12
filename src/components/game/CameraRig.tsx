@@ -9,6 +9,7 @@ import { PHYSICS } from "@/constants/config";
 import { useSimulationStore } from "@/store/simulationStore";
 import { sim } from "@/systems/simulation";
 import { fx } from "@/systems/fx";
+import { getArenaPreset } from "@/systems/rocks";
 import { EntityState } from "@/types/simulation";
 
 const _target = new THREE.Vector3();
@@ -27,6 +28,18 @@ export function CameraRig() {
     if (mode === "man") followIndex.current = sim.randomAliveIndex();
   }, [mode]);
 
+  // Cenário trocado: reencaixa a câmera na escala da arena
+  // (senão ela fica presa dentro da muralha em arenas pequenas)
+  const arenaId = useSimulationStore((s) => s.arenaId);
+  useEffect(() => {
+    const controls = controlsRef.current;
+    if (!controls) return;
+    const r = getArenaPreset(arenaId).radius;
+    camera.position.set(r * 0.55, r * 0.38 + 5, r * 0.7);
+    controls.target.set(0, 1.5, 0);
+    controls.update();
+  }, [arenaId, camera]);
+
   useFrame((_, delta) => {
     const controls = controlsRef.current;
     if (!controls) return;
@@ -35,7 +48,7 @@ export function CameraRig() {
 
     if (mode === "gorilla" && sim.gorilla.body) {
       const p = sim.gorilla.body.translation();
-      _target.set(p.x, p.y + 1.2, p.z);
+      _target.set(p.x, p.y + sim.gorillaRadius * 0.9, p.z);
       moveTargetKeepingOffset(controls, camera, _target, lerpK);
     } else if (mode === "man") {
       let i = followIndex.current;

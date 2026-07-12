@@ -19,8 +19,36 @@ type SoundName =
   | "scream"
   | "crit"
   | "streak"
+  | "beamCharge"
+  | "beamFire"
   | "gorillaStep"
   | "gorillaDie";
+
+/** Falas do locutor (arquivos CC0 do Voiceover Pack: Fighter, kenney.nl) */
+export type VoiceName =
+  | "fight"
+  | "combo"
+  | "multi_kill"
+  | "sudden_death"
+  | "survival_mode"
+  | "flawless_victory"
+  | "winner"
+  | "you_win"
+  | "game_over"
+  | "prepare_yourself";
+
+const VOICE_NAMES: VoiceName[] = [
+  "fight",
+  "combo",
+  "multi_kill",
+  "sudden_death",
+  "survival_mode",
+  "flawless_victory",
+  "winner",
+  "you_win",
+  "game_over",
+  "prepare_yourself",
+];
 
 const POOL_SIZE = 18;
 
@@ -236,6 +264,12 @@ export class AudioManager {
   private crickets: THREE.Audio | null = null;
   private drums: THREE.Audio | null = null;
   private drumsHeavy: THREE.Audio | null = null;
+  /** Música real de batalha ("Five Armies" — Kevin MacLeod, CC-BY 4.0) */
+  private music: THREE.Audio | null = null;
+  /** Locutor (vozes CC0 da Kenney) */
+  private announcer: THREE.Audio | null = null;
+  private voiceBuffers = new Map<VoiceName, AudioBuffer>();
+  private lastVoiceAt = -10;
   private group: THREE.Group | null = null;
   ready = false;
 
@@ -279,7 +313,45 @@ export class AudioManager {
     crossfadeLoop(crowd, 0.25);
     this.rumble = this.makeLoop(listener, crowd, 0);
 
+    // Assets externos carregam em segundo plano (o synth cobre enquanto isso)
+    this.loadExternalAssets(listener);
+
     this.ready = true;
+  }
+
+  private loadExternalAssets(listener: THREE.AudioListener) {
+    const loader = new THREE.AudioLoader();
+
+    this.music = new THREE.Audio(listener);
+    this.announcer = new THREE.Audio(listener);
+    this.announcer.setVolume(0.95);
+
+    loader.load("/audio/music/battle.mp3", (buffer) => {
+      if (!this.music) return;
+      this.music.setBuffer(buffer);
+      this.music.setLoop(true);
+      this.music.setVolume(0);
+      this.music.play();
+    });
+
+    for (const name of VOICE_NAMES) {
+      loader.load(`/audio/voice/${name}.ogg`, (buffer) => {
+        this.voiceBuffers.set(name, buffer);
+      });
+    }
+  }
+
+  /** Locutor de arena: "FIGHT!", "MULTI KILL", "SUDDEN DEATH"… */
+  playVoice(name: VoiceName, minInterval = 1.1) {
+    if (!this.listener || !this.announcer) return;
+    const buffer = this.voiceBuffers.get(name);
+    if (!buffer) return;
+    const now = this.listener.context.currentTime;
+    if (now - this.lastVoiceAt < minInterval) return;
+    this.lastVoiceAt = now;
+    if (this.announcer.isPlaying) this.announcer.stop();
+    this.announcer.setBuffer(buffer);
+    this.announcer.play();
   }
 
   private makeLoop(
@@ -413,6 +485,29 @@ export class AudioManager {
       }),
     );
 
+    // Rajada de energia: carga subindo + disparo devastador
+    b.set(
+      "beamCharge",
+      makeBuffer(ctx, 0.85, (t) => {
+        const k = t / 0.85;
+        const f = 160 + k * k * 900;
+        const trem = 0.65 + 0.35 * Math.sin(2 * Math.PI * (8 + k * 26) * t);
+        const body = Math.sin(2 * Math.PI * f * t) * trem;
+        const shimmer = Math.sin(2 * Math.PI * f * 2.01 * t) * 0.3 * k;
+        return (body + shimmer) * (0.25 + k * 0.75);
+      }),
+    );
+
+    const beamFire = makeBuffer(ctx, 1.1, (t) => {
+      const e = env(t, 0.015, 0.4) * (t < 0.9 ? 1 : Math.max(0, (1.1 - t) / 0.2));
+      const sub = Math.sin(2 * Math.PI * (52 - t * 14) * t) * 1.1;
+      const saw = (2 * ((t * 210) % 1) - 1) * 0.5;
+      const hiss = (Math.random() * 2 - 1) * 0.8;
+      return Math.tanh((sub + saw + hiss) * 1.6) * e;
+    });
+    lowpass(beamFire, 0.28);
+    b.set("beamFire", beamFire);
+
     // Sting de kill streak: dois toms rápidos + ping metálico
     b.set(
       "streak",
@@ -532,6 +627,12 @@ export class AudioManager {
       case "roar":
         this.play("roar", e.x, e.y, e.z, 1.4, 0.06, 1);
         break;
+      case "beamCharge":
+        this.play("beamCharge", e.x, e.y, e.z, 0.9, 0.05, 0.5);
+        break;
+      case "beam":
+        this.play("beamFire", e.x, e.y, e.z, 1.4, 0.05, 0.5);
+        break;
       case "shout":
         this.play("shout", e.x, e.y, e.z, 0.35, 0.4, 0.25);
         break;
@@ -550,10 +651,19 @@ export class AudioManager {
    */
   updateAmbience(running: boolean, intensity: number) {
     if (!this.ready) return;
+    // Com a música carregada, os tambores sintetizados viram camada de apoio
+    const hasMusic = !!this.music?.buffer;
     const targets: [THREE.Audio | null, number][] = [
       [this.crickets, running ? 0.05 : 0.16],
-      [this.drums, running ? 0.28 + intensity * 0.35 : 0],
-      [this.drumsHeavy, running ? Math.max(0, intensity - 0.3) * 0.75 : 0],
+      [this.music, running ? 0.34 + intensity * 0.16 : 0],
+      [
+        this.drums,
+        running ? (hasMusic ? 0.1 : 0.28) + intensity * (hasMusic ? 0.12 : 0.35) : 0,
+      ],
+      [
+        this.drumsHeavy,
+        running ? Math.max(0, intensity - 0.3) * (hasMusic ? 0.35 : 0.75) : 0,
+      ],
       [this.rumble, running ? Math.min(0.22, intensity * 0.25) : 0],
     ];
     for (const [audio, target] of targets) {

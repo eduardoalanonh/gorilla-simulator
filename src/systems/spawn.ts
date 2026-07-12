@@ -1,5 +1,5 @@
-import { ARENA, HORDE, PHYSICS, SPAWN } from "@/constants/config";
-import { BIG_ROCKS, rockColliderRadius } from "./rocks";
+import { HORDE, PHYSICS, SPAWN, type ArenaPreset } from "@/constants/config";
+import { getBigRocks, rockColliderRadius } from "./rocks";
 
 export interface SpawnPoint {
   x: number;
@@ -14,11 +14,12 @@ const ROCK_MARGIN = 0.5;
  * a uma pedra e, no passo de física seguinte, ser arremessado com força
  * total — o "pulo" aleatório reportado ao trocar a quantidade de homens.
  */
-function pushOutsideRocks(p: SpawnPoint): SpawnPoint {
+function pushOutsideRocks(p: SpawnPoint, preset: ArenaPreset): SpawnPoint {
   let { x, z } = p;
+  const rocks = getBigRocks(preset);
   for (let iter = 0; iter < 4; iter++) {
     let moved = false;
-    for (const rock of BIG_ROCKS) {
+    for (const rock of rocks) {
       const minDist = rockColliderRadius(rock) + PHYSICS.manRadius + ROCK_MARGIN;
       const dx = x - rock.x;
       const dz = z - rock.z;
@@ -37,11 +38,11 @@ function pushOutsideRocks(p: SpawnPoint): SpawnPoint {
     }
     if (!moved) break;
   }
-  return clampToArena({ x, z });
+  return clampToArena({ x, z }, preset);
 }
 
-function clampToArena(p: SpawnPoint): SpawnPoint {
-  const maxR = ARENA.radius - 4;
+function clampToArena(p: SpawnPoint, preset: ArenaPreset): SpawnPoint {
+  const maxR = preset.radius - 4;
   const dist = Math.sqrt(p.x * p.x + p.z * p.z);
   if (dist <= maxR) return p;
   const s = maxR / dist;
@@ -49,22 +50,39 @@ function clampToArena(p: SpawnPoint): SpawnPoint {
 }
 
 /** Ponto de reforço na borda da arena (modo horda). */
-export function hordeSpawnPoint(): SpawnPoint {
+export function hordeSpawnPoint(preset: ArenaPreset): SpawnPoint {
   const a = Math.random() * Math.PI * 2;
-  const r = ARENA.radius - HORDE.edgeMargin + (Math.random() - 0.5) * 4;
-  return pushOutsideRocks({ x: Math.cos(a) * r, z: Math.sin(a) * r });
+  const margin = Math.min(HORDE.edgeMargin, preset.radius * 0.3);
+  const r = preset.radius - margin + (Math.random() - 0.5) * 4;
+  return pushOutsideRocks({ x: Math.cos(a) * r, z: Math.sin(a) * r }, preset);
 }
 
 /**
  * Distribui `count` homens em anéis concêntricos ao redor do centro.
- * Quanto mais homens, maior o raio inicial e mais anéis.
+ * Quanto mais homens, maior o raio inicial e mais anéis; em arenas
+ * apertadas, o excedente é espalhado aleatoriamente dentro do espaço.
  */
-export function computeSpawnRing(count: number): SpawnPoint[] {
+export function computeSpawnRing(count: number, preset: ArenaPreset): SpawnPoint[] {
   const points: SpawnPoint[] = [];
-  let radius = SPAWN.baseRadius + Math.sqrt(count) * SPAWN.radiusPerSqrtMan;
+  const maxRadius = preset.radius - 4;
+  let radius = Math.min(
+    SPAWN.baseRadius + Math.sqrt(count) * SPAWN.radiusPerSqrtMan,
+    maxRadius,
+  );
   let remaining = count;
+  let clamped = false;
 
   while (remaining > 0) {
+    if (clamped) {
+      // Arena cheia: espalha o excedente em posições aleatórias
+      for (let i = 0; i < remaining; i++) {
+        const a = Math.random() * Math.PI * 2;
+        const r = SPAWN.baseRadius * 0.6 + Math.random() * (maxRadius - SPAWN.baseRadius * 0.6);
+        points.push(pushOutsideRocks({ x: Math.cos(a) * r, z: Math.sin(a) * r }, preset));
+      }
+      break;
+    }
+
     const circumference = Math.PI * 2 * radius;
     const ringCapacity = Math.max(4, Math.floor(circumference / SPAWN.arcSpacing));
     const inRing = Math.min(remaining, ringCapacity);
@@ -76,12 +94,15 @@ export function computeSpawnRing(count: number): SpawnPoint[] {
       const jitterR = (Math.random() - 0.5) * SPAWN.ringSpacing * 0.5;
       const a = angleBase + i * angleStep + jitterA;
       const r = radius + jitterR;
-      points.push(pushOutsideRocks({ x: Math.cos(a) * r, z: Math.sin(a) * r }));
+      points.push(pushOutsideRocks({ x: Math.cos(a) * r, z: Math.sin(a) * r }, preset));
     }
 
     remaining -= inRing;
     radius += SPAWN.ringSpacing;
-    if (radius > ARENA.radius - 4) radius = ARENA.radius - 4;
+    if (radius > maxRadius) {
+      radius = maxRadius;
+      clamped = true;
+    }
   }
 
   return points;
