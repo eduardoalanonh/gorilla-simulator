@@ -9,6 +9,7 @@ import { sim } from "@/systems/simulation";
 import { reviveMan, spawnGorilla, spawnMen } from "@/systems/physics";
 import { computeSpawnRing, hordeSpawnPoint } from "@/systems/spawn";
 import { checkWinner, updateGorilla, updateMen } from "@/systems/ai";
+import { activeProjectiles, updateProjectiles } from "@/systems/projectiles";
 import { audioManager } from "@/systems/audio";
 import { fx } from "@/systems/fx";
 import { getArenaPreset } from "@/systems/rocks";
@@ -125,6 +126,7 @@ export function SimulationLoop() {
 
       updateMen(sim, simDt);
       updateGorilla(sim, simDt);
+      updateProjectiles(sim, simDt);
       if (sim.running) {
         sim.time += simDt;
         sim.pruneRecentDeaths(AI.hesitationDeathWindow + 1);
@@ -292,7 +294,8 @@ export function SimulationLoop() {
         gorillaMaxHp: sim.gorilla.maxHp,
         elapsed: sim.time,
         fps: Math.round(fpsEma.current),
-        entityCount: sim.count + 1 + (fx.pool?.activeCount ?? 0),
+        entityCount:
+          sim.count + 1 + (fx.pool?.activeCount ?? 0) + activeProjectiles(sim),
       });
     }
   });

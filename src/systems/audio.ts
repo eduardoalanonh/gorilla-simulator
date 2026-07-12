@@ -21,6 +21,8 @@ type SoundName =
   | "streak"
   | "beamCharge"
   | "beamFire"
+  | "bow"
+  | "fireball"
   | "gorillaStep"
   | "gorillaDie";
 
@@ -508,6 +510,27 @@ export class AudioManager {
     lowpass(beamFire, 0.28);
     b.set("beamFire", beamFire);
 
+    // Arco: "twang" da corda + zunido da flecha
+    b.set(
+      "bow",
+      makeBuffer(ctx, 0.3, (t) => {
+        const twang =
+          Math.sin(2 * Math.PI * (340 - t * 180) * t) * env(t, 0.002, 0.05);
+        const wobble = Math.sin(2 * Math.PI * 90 * t) * env(t, 0.004, 0.08) * 0.5;
+        const hiss = (Math.random() * 2 - 1) * env(t, 0.01, 0.12) * 0.25;
+        return twang + wobble + hiss;
+      }),
+    );
+
+    // Bola de fogo: "foof" com crepitação
+    const fireball = makeBuffer(ctx, 0.5, (t) => {
+      const whoosh = (Math.random() * 2 - 1) * Math.sin((Math.PI * t) / 0.5) ** 2;
+      const crackle = Math.random() < 0.04 ? (Math.random() * 2 - 1) * 0.8 : 0;
+      return whoosh + crackle;
+    });
+    lowpass(fireball, 0.14);
+    b.set("fireball", fireball);
+
     // Sting de kill streak: dois toms rápidos + ping metálico
     b.set(
       "streak",
@@ -632,6 +655,12 @@ export class AudioManager {
         break;
       case "beam":
         this.play("beamFire", e.x, e.y, e.z, 1.4, 0.05, 0.5);
+        break;
+      case "shoot":
+        this.play("bow", e.x, e.y, e.z, 0.4, 0.25, 0.08);
+        break;
+      case "fireShoot":
+        this.play("fireball", e.x, e.y, e.z, 0.55, 0.2, 0.12);
         break;
       case "shout":
         this.play("shout", e.x, e.y, e.z, 0.35, 0.4, 0.25);

@@ -25,14 +25,14 @@ export const MAN_BASE: FighterStats = {
   weightKg: 80,
   moveSpeed: 5,
   attackRange: 1,
-  attackCooldown: 0.95,
+  attackCooldown: 1.05,
   critChance: 0.08,
   critMultiplier: 2,
   knockbackForce: 1.5,
 };
 
 export const GORILLA_BASE: FighterStats & { roarCooldown: number } = {
-  maxHealth: 10000,
+  maxHealth: 15000,
   attackDamage: 80,
   attackVariance: 15,
   weightKg: 220,
@@ -47,6 +47,17 @@ export const GORILLA_BASE: FighterStats & { roarCooldown: number } = {
 
 export type FighterRig = "human" | "dog" | "robot";
 
+/** Configuração de combatente à distância (arqueiros, magos). */
+export interface RangedConfig {
+  projectile: "arrow" | "fire";
+  /** Tempo de voo do projétil (s) */
+  flightTime: number;
+  /** Altura do arco balístico (m) */
+  arcHeight: number;
+  /** Chance do tiro errar (cai ao lado do gorila) */
+  missChance: number;
+}
+
 /** Multiplicadores aplicados sobre os stats base. */
 export interface StatModifier {
   id: string;
@@ -60,6 +71,10 @@ export interface StatModifier {
   crit: number;
   /** Modelo visual do combatente */
   rig: FighterRig;
+  /** Ataca à distância com projéteis */
+  ranged?: RangedConfig;
+  /** Imune a medo/hesitação (zumbis) */
+  fearless?: boolean;
 }
 
 const mod = (
@@ -122,6 +137,42 @@ export const MEN_MODIFIERS: StatModifier[] = [
     cooldown: 1.25,
     rig: "robot",
   }),
+  mod("arqueiros", "Arqueiros 🏹", "Flechas de longe, recuam se cercados", {
+    health: 0.9,
+    damage: 1.3,
+    speed: 1.05,
+    range: 13,
+    cooldown: 1.7,
+    ranged: { projectile: "arrow", flightTime: 0.55, arcHeight: 2.4, missChance: 0.25 },
+  }),
+  mod("magos", "Magos de Fogo 🧙", "Bolas de fogo em arco", {
+    health: 0.8,
+    damage: 2.8,
+    speed: 0.9,
+    range: 11,
+    cooldown: 2.4,
+    ranged: { projectile: "fire", flightTime: 0.75, arcHeight: 3.4, missChance: 0.15 },
+  }),
+  mod("ninjas", "Ninjas 🥷", "Rápidos, letais, dramáticos", {
+    health: 0.85,
+    damage: 1.7,
+    speed: 1.4,
+    crit: 3,
+    cooldown: 0.7,
+  }),
+  mod("zumbis", "Zumbis 🧟", "Lentos, resistentes e destemidos", {
+    health: 2.2,
+    damage: 1.1,
+    speed: 0.55,
+    cooldown: 1.4,
+    fearless: true,
+  }),
+  mod("herois", "Super-Heróis 🦸", "Capas, poses e socos heroicos", {
+    health: 2.4,
+    damage: 2.6,
+    speed: 1.35,
+    crit: 1.5,
+  }),
 ];
 
 /** Variante de gorila: stats + visual (escala, cores, cauda, aura, rajada). */
@@ -177,7 +228,7 @@ export const GORILLA_MODIFIERS: GorillaVariant[] = [
     back: 0x7d8087,
   }),
   gorilla("gigante", "Gorila GIGANTE 🏔️", "Um monstro de 7 metros", {
-    health: 3.2,
+    health: 4,
     damage: 2.2,
     speed: 0.95,
     range: 1.9,
@@ -185,7 +236,7 @@ export const GORILLA_MODIFIERS: GorillaVariant[] = [
     scale: 2.1,
   }),
   gorilla("oozaru", "Macaco Lendário 🌕", "Homenagem a um Saiyajin na lua cheia", {
-    health: 5,
+    health: 8,
     damage: 3,
     speed: 0.85,
     range: 2.4,
@@ -200,7 +251,7 @@ export const GORILLA_MODIFIERS: GorillaVariant[] = [
     beam: true,
   }),
   gorilla("dourado", "Gorila Dourado ⚡", "Cabelo dourado, poder além dos limites", {
-    health: 1.6,
+    health: 2,
     damage: 1.4,
     speed: 1.55,
     cooldown: 0.55,

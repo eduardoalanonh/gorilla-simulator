@@ -11,6 +11,7 @@ import {
   MAX_MEN,
   MEN_MODIFIERS,
   PHYSICS,
+  type RangedConfig,
 } from "@/constants/config";
 import {
   EntityState,
@@ -19,6 +20,31 @@ import {
   type HistorySample,
 } from "@/types/simulation";
 import { SpatialHash } from "./spatial";
+
+export interface Projectile {
+  active: boolean;
+  kind: "arrow" | "fire";
+  /** Origem do tiro */
+  sx: number;
+  sy: number;
+  sz: number;
+  /** Progresso 0..1 e duração do voo */
+  t: number;
+  flight: number;
+  arc: number;
+  dmg: number;
+  crit: boolean;
+  /** Tiro errado: cai ao lado do alvo (offset fixo) */
+  missX: number;
+  missZ: number;
+  /** Posição atual e anterior (orientação da flecha) */
+  x: number;
+  y: number;
+  z: number;
+  px: number;
+  py: number;
+  pz: number;
+}
 
 export interface GorillaState {
   body: RigidBody | null;
@@ -91,6 +117,10 @@ export class Simulation {
   grid = new SpatialHash(2);
 
   manStats: FighterStats = { ...MAN_BASE };
+  /** Config de ataque à distância (null = corpo a corpo) */
+  manRanged: RangedConfig | null = null;
+  /** Imune a medo/hesitação (zumbis) */
+  manFearless = false;
   gorillaStats: FighterStats & { roarCooldown: number } = { ...GORILLA_BASE };
   gorillaVariant: GorillaVariant = GORILLA_MODIFIERS[0];
   /** Raio físico do gorila (escala com a variante) */
@@ -117,6 +147,9 @@ export class Simulation {
 
   effects: EffectEvent[] = [];
   recentDeaths: { x: number; z: number; t: number }[] = [];
+
+  /** Projéteis em voo (flechas, bolas de fogo) — pool com reuso */
+  projectiles: Projectile[] = [];
 
   /** Orçamento de poeira por frame (compartilhado entre os homens). */
   dustBudget = 0;
@@ -192,6 +225,9 @@ export class Simulation {
     const gorMod =
       GORILLA_MODIFIERS.find((m) => m.id === gorillaModId) ?? GORILLA_MODIFIERS[0];
     this.manStats = applyModifier(MAN_BASE, menMod);
+    this.manRanged = menMod.ranged ?? null;
+    this.manFearless = !!menMod.fearless;
+    for (const p of this.projectiles) p.active = false;
     this.gorillaVariant = gorMod;
     this.gorillaRadius = PHYSICS.gorillaRadius * gorMod.scale;
     this.gorillaStats = {
@@ -247,6 +283,44 @@ export class Simulation {
       this.velX[i] = v.x;
       this.velY[i] = v.y;
       this.velZ[i] = v.z;
+    }
+  }
+
+  /** Dispara um projétil de `(sx,sy,sz)` em direção ao gorila. */
+  spawnProjectile(
+    kind: "arrow" | "fire",
+    sx: number,
+    sy: number,
+    sz: number,
+    dmg: number,
+    crit: boolean,
+    miss: boolean,
+  ) {
+    if (!this.manRanged) return;
+    let p = this.projectiles.find((q) => !q.active);
+    if (!p) {
+      if (this.projectiles.length >= 400) return;
+      p = {} as Projectile;
+      this.projectiles.push(p);
+    }
+    p.active = true;
+    p.kind = kind;
+    p.sx = p.x = p.px = sx;
+    p.sy = p.y = p.py = sy;
+    p.sz = p.z = p.pz = sz;
+    p.t = 0;
+    p.flight = this.manRanged.flightTime;
+    p.arc = this.manRanged.arcHeight;
+    p.dmg = dmg;
+    p.crit = crit;
+    if (miss) {
+      const a = Math.random() * Math.PI * 2;
+      const r = 2 + Math.random() * 2.5;
+      p.missX = Math.cos(a) * r;
+      p.missZ = Math.sin(a) * r;
+    } else {
+      p.missX = 0;
+      p.missZ = 0;
     }
   }
 

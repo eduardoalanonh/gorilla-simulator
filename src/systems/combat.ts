@@ -122,7 +122,8 @@ export function killMan(sim: Simulation, i: number) {
   }
   sim.emit("death", sim.posX[i], sim.posY[i], sim.posZ[i], 1);
 
-  // Pânico: mortes próximas podem fazer vizinhos hesitarem
+  // Pânico: mortes próximas podem fazer vizinhos hesitarem (zumbis não)
+  if (sim.manFearless) return;
   const deaths = sim.countRecentDeathsNear(
     sim.posX[i],
     sim.posZ[i],

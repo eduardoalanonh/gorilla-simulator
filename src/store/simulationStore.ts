@@ -118,6 +118,7 @@ export const useSimulationStore = create<SimulationStore>()((set, get) => ({
       runId: s.runId + 1,
       results: null,
       elapsed: 0,
+      streak: null,
     })),
 
   randomize: () =>

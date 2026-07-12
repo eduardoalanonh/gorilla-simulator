@@ -40,6 +40,8 @@ export interface EffectEvent {
     | "killstreak"
     | "beamCharge"
     | "beam"
+    | "shoot"
+    | "fireShoot"
     | "gorillaStep"
     | "gorillaDie";
   x: number;

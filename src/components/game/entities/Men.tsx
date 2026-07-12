@@ -104,6 +104,40 @@ const DOG_FURS = [0x8a6a45, 0x5d4a33, 0x3a3230, 0xa88f6a, 0x6e6259, 0x4a3b2a];
 const ROBOT_STEELS = [0x9aa2ad, 0x7d858f, 0x6a7178, 0x848b8f, 0xb0b6bd];
 const ROBOT_GLOWS = [0x66e0ff, 0xff5f5f, 0x8aff80, 0xffd166];
 
+/** Paletas temáticas por combatente (humanos): [peles, camisas, calças] */
+const HUMAN_PALETTES: Record<
+  string,
+  { skins: number[]; shirts: number[]; pants: number[] }
+> = {
+  ninjas: {
+    skins: [0x3a3438, 0x453d40, 0x2e2a2e],
+    shirts: [0x1c1a20, 0x24202a, 0x191722, 0x2a1c1c],
+    pants: [0x16141c, 0x1e1a22],
+  },
+  zumbis: {
+    skins: [0x7da05a, 0x5e8a4a, 0x8fae6b, 0x6a9455],
+    shirts: [0x4a4438, 0x3e3a30, 0x55503f, 0x39362c],
+    pants: [0x33302a, 0x2b2924],
+  },
+  herois: {
+    skins: [0xd9a066, 0xc68642, 0x8d5524, 0xe8b88a],
+    shirts: [0xd42a2a, 0x2255cc, 0x1fa04a, 0x8a2acc, 0xe8801a, 0x11a0a8],
+    pants: [0x20336b, 0x5a1c1c, 0x1c4a2a, 0x3a1c5a],
+  },
+  arqueiros: {
+    skins: [0xd9a066, 0xc68642, 0x8d5524, 0xa46a3f],
+    shirts: [0x3f5e3a, 0x50663a, 0x5a5030, 0x44583f],
+    pants: [0x4a3b28, 0x3c3222, 0x51422e],
+  },
+  magos: {
+    skins: [0xd9a066, 0xc68642, 0xe8b88a, 0x8d5524],
+    shirts: [0x4a2a7a, 0x2a3a8a, 0x5a1f6e, 0x28206e],
+    pants: [0x3a2160, 0x232a66],
+  },
+};
+
+const CAPE_COLORS = [0xe8c520, 0xd42a2a, 0x2255cc, 0x1fa04a, 0xe8e8e8, 0x8a2acc];
+
 const _root = new THREE.Matrix4();
 const _local = new THREE.Matrix4();
 const _out = new THREE.Matrix4();
@@ -141,14 +175,31 @@ export function Men() {
   // Cores base por instância (restauradas quando um cadáver é reciclado)
   const baseColors = useRef<Record<string, Float32Array>>({});
 
+  const hatRef = useRef<THREE.InstancedMesh | null>(null);
+  const capeRef = useRef<THREE.InstancedMesh | null>(null);
+
+  // Acessórios por combatente: mão direita (arma), mão esquerda, cabeça, costas
   const hasWeapon =
-    rig === "human" && (menModifierId === "bastoes" || menModifierId === "medieval");
-  const hasShield = rig === "human" && menModifierId === "medieval";
+    rig === "human" &&
+    (menModifierId === "bastoes" ||
+      menModifierId === "medieval" ||
+      menModifierId === "magos");
+  const hasShield =
+    rig === "human" &&
+    (menModifierId === "medieval" || menModifierId === "arqueiros");
+  const hasHat = menModifierId === "magos";
+  const hasCape = menModifierId === "herois";
 
   const weaponGeometry = useMemo(() => {
     if (menModifierId === "medieval") {
       const g = new THREE.BoxGeometry(0.05, 0.85, 0.14);
       g.translate(0, -0.45, 0.1);
+      return g;
+    }
+    if (menModifierId === "magos") {
+      // Cajado longo com ponta
+      const g = new THREE.CylinderGeometry(0.03, 0.04, 1.5, 6);
+      g.translate(0, -0.35, 0.12);
       return g;
     }
     const g = new THREE.CylinderGeometry(0.035, 0.045, 1.05, 6);
@@ -157,9 +208,28 @@ export function Men() {
   }, [menModifierId]);
 
   const shieldGeometry = useMemo(() => {
+    if (menModifierId === "arqueiros") {
+      // Arco: arco de torus vertical na mão esquerda
+      const g = new THREE.TorusGeometry(0.42, 0.025, 6, 14, Math.PI);
+      g.rotateZ(-Math.PI / 2);
+      g.translate(0, -0.42, 0.14);
+      return g;
+    }
     const g = new THREE.CylinderGeometry(0.32, 0.32, 0.05, 14);
     g.rotateX(Math.PI / 2);
     g.translate(0, -0.3, 0.16);
+    return g;
+  }, [menModifierId]);
+
+  const hatGeometry = useMemo(() => {
+    const g = new THREE.ConeGeometry(0.2, 0.42, 8);
+    g.translate(0, 0.21, 0);
+    return g;
+  }, []);
+
+  const capeGeometry = useMemo(() => {
+    const g = new THREE.PlaneGeometry(0.52, 0.75);
+    g.translate(0, -0.36, 0);
     return g;
   }, []);
 
@@ -176,15 +246,20 @@ export function Men() {
       steelDark: [],
       glow: [],
     };
+    const humanPalette = HUMAN_PALETTES[menModifierId];
+    const skinPool = humanPalette?.skins ?? COLORS.skinTones;
+    const shirtPool = humanPalette?.shirts ?? COLORS.shirts;
+    const pantsPool = humanPalette?.pants ?? COLORS.pants;
+
     for (let i = 0; i < MAX_MEN; i++) {
       const skin = new THREE.Color(
-        COLORS.skinTones[Math.floor(rng() * COLORS.skinTones.length)],
+        skinPool[Math.floor(rng() * skinPool.length)],
       );
       const shirt = new THREE.Color(
-        COLORS.shirts[Math.floor(rng() * COLORS.shirts.length)],
+        shirtPool[Math.floor(rng() * shirtPool.length)],
       );
       const pants = new THREE.Color(
-        COLORS.pants[Math.floor(rng() * COLORS.pants.length)],
+        pantsPool[Math.floor(rng() * pantsPool.length)],
       );
       const fur = new THREE.Color(DOG_FURS[Math.floor(rng() * DOG_FURS.length)]);
       const steel = new THREE.Color(
@@ -219,6 +294,18 @@ export function Men() {
       baseColors.current[name] = store;
       if (mesh.instanceColor) mesh.instanceColor.needsUpdate = true;
     }
+
+    // Capas dos heróis: cores vivas por instância
+    const cape = capeRef.current;
+    if (cape) {
+      const rng2 = mulberry32(runId * 511 + 77);
+      for (let i = 0; i < MAX_MEN; i++) {
+        _color.setHex(CAPE_COLORS[Math.floor(rng2() * CAPE_COLORS.length)]);
+        cape.setColorAt(i, _color);
+      }
+      if (cape.instanceColor) cape.instanceColor.needsUpdate = true;
+    }
+
     tinted.current.fill(0);
     frozen.current.fill(0);
   }, [runId, menCount, partNames, parts, menModifierId]);
@@ -230,10 +317,14 @@ export function Men() {
     if (meshes.some((m) => !m)) return;
     const weapon = weaponRef.current;
     const shield = shieldRef.current;
+    const hat = hatRef.current;
+    const cape = capeRef.current;
 
     for (const m of meshes) m!.count = count;
     if (weapon) weapon.count = hasWeapon ? count : 0;
     if (shield) shield.count = hasShield ? count : 0;
+    if (hat) hat.count = hasHat ? count : 0;
+    if (cape) cape.count = hasCape ? count : 0;
 
     for (let i = 0; i < count; i++) {
       const dead = sim.state[i] === EntityState.Dead;
@@ -383,6 +474,22 @@ export function Men() {
           shield.setMatrixAt(i, _out);
         }
       }
+
+      // Chapéu de mago (segue a cabeça) e capa de herói (ondula ao correr)
+      if (hat && hasHat) {
+        _pos.set(0, 1.56, 0);
+        _local.compose(_pos, IDENTITY_QUAT, _unit);
+        _out.multiplyMatrices(_root, _local);
+        hat.setMatrixAt(i, _out);
+      }
+      if (cape && hasCape) {
+        const wave = 0.28 + Math.min(hSpeed * 0.07, 0.85) + Math.sin(gait) * 0.07;
+        _swing.setFromAxisAngle(_axisX, wave);
+        _pos.set(0, 1.3, -0.15);
+        _local.compose(_pos, _swing, _unit);
+        _out.multiplyMatrices(_root, _local);
+        cape.setMatrixAt(i, _out);
+      }
     }
 
     // Zera instâncias além do count atual
@@ -393,6 +500,8 @@ export function Men() {
     }
     if (weapon && hasWeapon) weapon.instanceMatrix.needsUpdate = true;
     if (shield && hasShield) shield.instanceMatrix.needsUpdate = true;
+    if (hat && hasHat) hat.instanceMatrix.needsUpdate = true;
+    if (cape && hasCape) cape.instanceMatrix.needsUpdate = true;
   });
 
   return (
@@ -435,13 +544,38 @@ export function Men() {
       )}
       {hasShield && (
         <instancedMesh
-          key="shield"
+          key={`shield-${menModifierId}`}
           ref={shieldRef}
           args={[shieldGeometry, undefined, MAX_MEN]}
           castShadow
           frustumCulled={false}
         >
-          <meshStandardMaterial color="#5b4a2f" roughness={0.7} metalness={0.25} />
+          <meshStandardMaterial
+            color={menModifierId === "arqueiros" ? "#6e502e" : "#5b4a2f"}
+            roughness={0.75}
+            metalness={menModifierId === "arqueiros" ? 0 : 0.25}
+          />
+        </instancedMesh>
+      )}
+      {hasHat && (
+        <instancedMesh
+          key="hat"
+          ref={hatRef}
+          args={[hatGeometry, undefined, MAX_MEN]}
+          castShadow
+          frustumCulled={false}
+        >
+          <meshStandardMaterial color="#3a2178" roughness={0.85} />
+        </instancedMesh>
+      )}
+      {hasCape && (
+        <instancedMesh
+          key="cape"
+          ref={capeRef}
+          args={[capeGeometry, undefined, MAX_MEN]}
+          frustumCulled={false}
+        >
+          <meshStandardMaterial roughness={0.8} side={THREE.DoubleSide} />
         </instancedMesh>
       )}
     </group>

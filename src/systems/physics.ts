@@ -71,10 +71,15 @@ export function spawnGorilla(world: World, rapier: RapierModule, sim: Simulation
       .setTranslation(0, r, 0)
       .setLinearDamping(PHYSICS.gorillaDamping)
       .enabledRotations(false, false, false)
+      // Y travado: a multidão comprimindo a esfera do gorila o "espremia"
+      // para cima (efeito semente de melancia) — o bug do gorila voador.
+      // A arena é plana, então ele vive exatamente em y = raio.
+      .enabledTranslations(true, false, true)
       .setCcdEnabled(true);
     body = world.createRigidBody(desc);
     sim.gorilla.body = body;
   }
+  body.setEnabledTranslations(true, false, true, false);
 
   // Colisor é recriado quando a variante muda de tamanho
   const current = sim.gorilla.collider;

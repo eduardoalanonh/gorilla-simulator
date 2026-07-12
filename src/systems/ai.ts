@@ -1,7 +1,7 @@
 import { AI, PHYSICS } from "@/constants/config";
 import { EntityState } from "@/types/simulation";
 import { freezeCorpse } from "./physics";
-import { gorillaHitMan, manAttack } from "./combat";
+import { gorillaHitMan, manAttack, rollDamage } from "./combat";
 import type { Simulation } from "./simulation";
 import { dampAngle } from "@/utils/random";
 
@@ -123,9 +123,13 @@ export function updateMen(sim: Simulation, dt: number) {
     let vz = 0;
     const speed = stats.moveSpeed * sim.speedVar[i];
 
+    const ranged = sim.manRanged;
+
     if (state === EntityState.Running || state === EntityState.Searching) {
-      // Ponto alvo: posição no anel de cerco ao redor do gorila
-      const ringR = sim.gorillaRadius + stats.attackRange * 0.62;
+      // Ponto alvo: anel de cerco (corpo a corpo) ou de tiro (à distância)
+      const ringR = ranged
+        ? attackDist * 0.72
+        : sim.gorillaRadius + stats.attackRange * 0.62;
       const tx = gPos.x + Math.cos(sim.angleOffset[i]) * ringR;
       const tz = gPos.z + Math.sin(sim.angleOffset[i]) * ringR;
       let mx = tx - sim.posX[i];
@@ -136,13 +140,42 @@ export function updateMen(sim: Simulation, dt: number) {
       vx = mx * speed;
       vz = mz * speed;
     } else if (state === EntityState.Attacking) {
-      // Segura posição, encara o gorila e golpeia
-      vx = dirX * speed * 0.12;
-      vz = dirZ * speed * 0.12;
-      if (sim.cooldown[i] <= 0 && dist <= attackDist * 1.15 && gorillaAlive) {
-        sim.cooldown[i] =
-          stats.attackCooldown * (0.85 + Math.random() * 0.35);
-        manAttack(sim, i);
+      if (ranged) {
+        // Kiting: gorila chegando perto → recua atirando
+        if (dist < attackDist * 0.45) {
+          vx = -dirX * speed;
+          vz = -dirZ * speed;
+        }
+        if (sim.cooldown[i] <= 0 && dist <= attackDist * 1.05 && gorillaAlive) {
+          sim.cooldown[i] = stats.attackCooldown * (0.85 + Math.random() * 0.35);
+          sim.punchAnim[i] = 1;
+          const roll = rollDamage(stats);
+          sim.spawnProjectile(
+            ranged.projectile,
+            sim.posX[i],
+            sim.posY[i] + 1.25,
+            sim.posZ[i],
+            roll.amount,
+            roll.crit,
+            Math.random() < ranged.missChance,
+          );
+          sim.emit(
+            ranged.projectile === "fire" ? "fireShoot" : "shoot",
+            sim.posX[i],
+            sim.posY[i] + 1.2,
+            sim.posZ[i],
+            1,
+          );
+        }
+      } else {
+        // Segura posição, encara o gorila e golpeia
+        vx = dirX * speed * 0.12;
+        vz = dirZ * speed * 0.12;
+        if (sim.cooldown[i] <= 0 && dist <= attackDist * 1.05 && gorillaAlive) {
+          sim.cooldown[i] =
+            stats.attackCooldown * (0.85 + Math.random() * 0.35);
+          manAttack(sim, i);
+        }
       }
     } else if (state === EntityState.Recovering) {
       // Hesitação: recua devagar olhando para o gorila
@@ -477,7 +510,7 @@ function applyRoar(sim: Simulation, gx: number, gz: number) {
     const oz = sim.posZ[j] - gz;
     const d = Math.sqrt(ox * ox + oz * oz);
     if (d > AI.roarFearRadius || d === 0) return;
-    if (Math.random() < 0.55) {
+    if (!sim.manFearless && Math.random() < 0.55) {
       sim.fearTimer[j] = 0.8 + Math.random() * 2.2;
       sim.state[j] = EntityState.Recovering;
     }
