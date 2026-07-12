@@ -3,11 +3,11 @@
 import { useEffect, useRef } from "react";
 import { useFrame } from "@react-three/fiber";
 import { useRapier } from "@react-three/rapier";
-import { PHYSICS, SLOW_MOTION_FACTOR, FX, AI } from "@/constants/config";
+import { PHYSICS, SLOW_MOTION_FACTOR, FX, AI, HORDE } from "@/constants/config";
 import { useSimulationStore } from "@/store/simulationStore";
 import { sim } from "@/systems/simulation";
-import { spawnGorilla, spawnMen } from "@/systems/physics";
-import { computeSpawnRing } from "@/systems/spawn";
+import { reviveMan, spawnGorilla, spawnMen } from "@/systems/physics";
+import { computeSpawnRing, hordeSpawnPoint } from "@/systems/spawn";
 import { checkWinner, updateGorilla, updateMen } from "@/systems/ai";
 import { audioManager } from "@/systems/audio";
 import { fx } from "@/systems/fx";
@@ -32,6 +32,7 @@ export function SimulationLoop() {
   const menCount = useSimulationStore((s) => s.menCount);
   const menModifierId = useSimulationStore((s) => s.menModifierId);
   const gorillaModifierId = useSimulationStore((s) => s.gorillaModifierId);
+  const hordeMode = useSimulationStore((s) => s.hordeMode);
   const muted = useSimulationStore((s) => s.muted);
 
   // (Re)spawn do mundo — debounce para o slider não recriar 1000 corpos por tick
@@ -53,7 +54,7 @@ export function SimulationLoop() {
     if (phase === "running" || phase === "ended") return;
     const delay = spawnedCount.current === -1 ? 0 : 280;
     const handle = setTimeout(() => {
-      sim.resetRun(menCount, menModifierId, gorillaModifierId);
+      sim.resetRun(menCount, menModifierId, gorillaModifierId, hordeMode);
       spawnGorilla(world, rapier, sim);
       spawnMen(world, rapier, sim, computeSpawnRing(menCount));
       spawnedCount.current = menCount;
@@ -68,7 +69,7 @@ export function SimulationLoop() {
       });
     }, delay);
     return () => clearTimeout(handle);
-  }, [runId, menCount, menModifierId, gorillaModifierId, phase, world, rapier]);
+  }, [runId, menCount, menModifierId, gorillaModifierId, hordeMode, phase, world, rapier]);
 
   useEffect(() => {
     sim.running = phase === "running";
@@ -107,6 +108,25 @@ export function SimulationLoop() {
       if (sim.running) {
         sim.time += simDt;
         sim.pruneRecentDeaths(AI.hesitationDeathWindow + 1);
+        sim.sampleHistory(simDt);
+
+        // Modo horda: recicla cadáveres assentados como reforços na borda
+        if (sim.horde && sim.gorilla.hp > 0) {
+          sim.hordeSpawnTimer -= simDt;
+          if (sim.hordeSpawnTimer <= 0) {
+            sim.hordeSpawnTimer = HORDE.spawnInterval;
+            const missing = Math.min(
+              HORDE.spawnBatch,
+              spawnedCount.current - sim.aliveCount,
+            );
+            for (let n = 0; n < missing; n++) {
+              const slot = sim.findRecyclableCorpse();
+              if (slot < 0) break;
+              const p = hordeSpawnPoint();
+              reviveMan(sim, slot, p.x, p.z);
+            }
+          }
+        }
       }
 
       world.timestep = h;
@@ -156,6 +176,10 @@ export function SimulationLoop() {
         fx.pool?.handleEvent(e);
         audioManager.handleEvent(e);
         if (e.type === "damage") fx.numbers?.spawn(e);
+        if (e.type === "killstreak") {
+          store.announceStreak(e.power);
+          fx.shake = Math.max(fx.shake, 0.15 + e.power * 0.03);
+        }
         if (e.type === "roar") fx.shake = Math.max(fx.shake, 0.5);
         else if (e.type === "slam") fx.shake = Math.max(fx.shake, 0.4);
         else if (e.type === "gorillaDie") fx.shake = Math.max(fx.shake, 0.8);
@@ -165,11 +189,26 @@ export function SimulationLoop() {
 
     fx.pool?.update(dt * speedFactor);
     fx.numbers?.update(dt * speedFactor);
-    audioManager.updateAmbience(sim.running, Math.min(1, sim.aliveCount / 220));
+
+    // Intensidade musical: multidão em campo, ritmo de abates ou fúria
+    const recentKills = sim.recentDeaths.filter(
+      (d) => sim.time - d.t < 3,
+    ).length;
+    const intensity = Math.min(
+      1,
+      Math.max(
+        sim.aliveCount / 300,
+        recentKills / 12,
+        sim.gorilla.enraged ? 0.75 : 0,
+      ),
+    );
+    audioManager.updateAmbience(sim.running, intensity);
 
     // Fim de batalha (com pequeno delay cinematográfico)
     if (store.phase === "running") {
-      const winner = checkWinner(sim);
+      let winner = checkWinner(sim);
+      // Na horda só o gorila caindo encerra — reforços estão a caminho
+      if (sim.horde && winner === "gorilla") winner = null;
       if (winner && !ending.current) {
         ending.current = { winner, t: 0 };
         sim.running = winner === "men"; // homens comemoram? não — congela IA do lado morto
@@ -180,8 +219,16 @@ export function SimulationLoop() {
           const w = ending.current.winner;
           ending.current = null;
           sim.running = false;
+          // Fecha a linha do tempo com o estado final
+          sim.history.push({
+            t: sim.time,
+            deaths: sim.deadCount,
+            gorillaHp: Math.max(0, sim.gorilla.hp),
+          });
           store.finish(w, {
             winner: w,
+            mode: sim.horde ? "horde" : "classic",
+            history: sim.history.slice(),
             durationSec: sim.time,
             initialMen: sim.count,
             survivors: sim.aliveCount,

@@ -61,6 +61,7 @@ export type BattleMode = "classic" | "horde";
 export interface BattleResults {
   winner: Winner;
   mode: BattleMode;
+  history: HistorySample[];
   durationSec: number;
   initialMen: number;
   survivors: number;

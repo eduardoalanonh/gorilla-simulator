@@ -1,6 +1,8 @@
 "use client";
 
-import { motion } from "framer-motion";
+import { useEffect, useState } from "react";
+import { AnimatePresence, motion } from "framer-motion";
+import { KILL_STREAKS } from "@/constants/config";
 import { useSimulationStore } from "@/store/simulationStore";
 import { formatTime } from "@/utils/random";
 import type { CameraMode } from "@/types/simulation";
@@ -24,6 +26,7 @@ export function HUD() {
   const cameraMode = useSimulationStore((s) => s.cameraMode);
   const setCameraMode = useSimulationStore((s) => s.setCameraMode);
   const phase = useSimulationStore((s) => s.phase);
+  const hordeMode = useSimulationStore((s) => s.hordeMode);
 
   const hpFrac = gorillaMaxHp > 0 ? gorillaHp / gorillaMaxHp : 0;
 
@@ -65,7 +68,11 @@ export function HUD() {
         className="pointer-events-none fixed left-4 top-4 z-30 flex flex-col gap-1.5"
       >
         <StatChip label="Vivos" value={aliveMen} accent="text-sky-300" />
-        <StatChip label="Mortos" value={deadMen} accent="text-red-400" />
+        <StatChip
+          label={hordeMode ? "Score 🦍" : "Mortos"}
+          value={deadMen}
+          accent={hordeMode ? "text-amber-300" : "text-red-400"}
+        />
         <StatChip label="Tempo" value={formatTime(elapsed)} accent="text-amber-200" />
         <StatChip label="FPS" value={fps} accent={fps < 30 ? "text-red-400" : "text-emerald-300"} />
         <StatChip label="Entidades" value={entityCount} accent="text-zinc-300" />
@@ -93,6 +100,8 @@ export function HUD() {
         ))}
       </motion.div>
 
+      <KillStreakPopup />
+
       {phase === "ready" && (
         <motion.p
           initial={{ opacity: 0 }}
@@ -105,6 +114,59 @@ export function HUD() {
         </motion.p>
       )}
     </>
+  );
+}
+
+function streakLabel(count: number) {
+  for (const [min, label] of KILL_STREAKS) if (count >= min) return label;
+  return null;
+}
+
+/** Popup central de kill streak — some sozinho após ~1.4s. */
+function KillStreakPopup() {
+  const streak = useSimulationStore((s) => s.streak);
+  const [visible, setVisible] = useState<{ label: string; count: number; id: number } | null>(null);
+
+  useEffect(() => {
+    if (!streak) return;
+    const label = streakLabel(streak.count);
+    if (!label) return;
+    setVisible({ label, count: streak.count, id: streak.id });
+    const t = setTimeout(() => setVisible(null), 1400);
+    return () => clearTimeout(t);
+  }, [streak]);
+
+  const big = (visible?.count ?? 0) >= 5;
+
+  return (
+    <div className="pointer-events-none fixed left-1/2 top-[26%] z-30 -translate-x-1/2">
+      <AnimatePresence mode="popLayout">
+        {visible && (
+          <motion.div
+            key={visible.id}
+            initial={{ scale: 0.3, opacity: 0, rotate: -6 }}
+            animate={{ scale: 1, opacity: 1, rotate: 0 }}
+            exit={{ scale: 1.25, opacity: 0 }}
+            transition={{ type: "spring", stiffness: 320, damping: 16 }}
+            className="flex flex-col items-center"
+          >
+            <span
+              className={cn(
+                "font-display tracking-wide",
+                big
+                  ? "text-5xl text-red-400 [text-shadow:0_2px_0_rgba(80,10,10,0.9),0_6px_28px_rgba(255,60,30,0.6)]"
+                  : "text-4xl text-amber-300 [text-shadow:0_2px_0_rgba(90,50,5,0.9),0_5px_20px_rgba(255,150,40,0.5)]",
+              )}
+            >
+              {visible.label}
+            </span>
+            <span className="mt-1 rounded-full bg-black/60 px-3 py-0.5 font-mono text-xs font-bold text-zinc-200">
+              {visible.count} de uma vez
+            </span>
+          </motion.div>
+        )}
+      </AnimatePresence>
+    </div>
   );
 }
 

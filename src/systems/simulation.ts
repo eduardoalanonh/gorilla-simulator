@@ -8,7 +8,12 @@ import {
   MAX_MEN,
   MEN_MODIFIERS,
 } from "@/constants/config";
-import { EntityState, type EffectEvent, type GorillaAction } from "@/types/simulation";
+import {
+  EntityState,
+  type EffectEvent,
+  type GorillaAction,
+  type HistorySample,
+} from "@/types/simulation";
 import { SpatialHash } from "./spatial";
 
 export interface GorillaState {
@@ -89,6 +94,16 @@ export class Simulation {
   menDamage = 0;
   running = false;
 
+  /** Modo horda: mortos renascem na borda até o gorila cair */
+  horde = false;
+  hordeSpawnTimer = 0;
+  hordeScanCursor = 0;
+
+  /** Linha do tempo da batalha (gráfico da tela final) */
+  history: HistorySample[] = [];
+  historyTimer = 0;
+  historyInterval = 0.5;
+
   effects: EffectEvent[] = [];
   recentDeaths: { x: number; z: number; t: number }[] = [];
 
@@ -136,7 +151,7 @@ export class Simulation {
   }
 
   /** Reinicia stats e contadores para uma nova batalha (corpos são reposicionados fora daqui). */
-  resetRun(count: number, menModId: string, gorillaModId: string) {
+  resetRun(count: number, menModId: string, gorillaModId: string, horde = false) {
     this.count = count;
     this.time = 0;
     this.running = false;
@@ -146,6 +161,12 @@ export class Simulation {
     this.menDamage = 0;
     this.effects.length = 0;
     this.recentDeaths.length = 0;
+    this.horde = horde;
+    this.hordeSpawnTimer = 0;
+    this.hordeScanCursor = 0;
+    this.history.length = 0;
+    this.historyTimer = 0;
+    this.historyInterval = 0.5;
 
     const menMod = MEN_MODIFIERS.find((m) => m.id === menModId) ?? MEN_MODIFIERS[0];
     const gorMod =
@@ -203,6 +224,34 @@ export class Simulation {
       this.velY[i] = v.y;
       this.velZ[i] = v.z;
     }
+  }
+
+  /** Amostra a linha do tempo; comprime quando fica longa (hordas). */
+  sampleHistory(dt: number) {
+    this.historyTimer -= dt;
+    if (this.historyTimer > 0) return;
+    this.historyTimer = this.historyInterval;
+    this.history.push({
+      t: this.time,
+      deaths: this.deadCount,
+      gorillaHp: Math.max(0, this.gorilla.hp),
+    });
+    if (this.history.length > 640) {
+      this.history = this.history.filter((_, i) => i % 2 === 0);
+      this.historyInterval *= 2;
+    }
+  }
+
+  /** Busca circular por um cadáver assentado para reciclar (modo horda). */
+  findRecyclableCorpse(): number {
+    for (let n = 0; n < this.count; n++) {
+      const i = (this.hordeScanCursor + n) % this.count;
+      if (this.state[i] === EntityState.Dead && this.settled[i]) {
+        this.hordeScanCursor = (i + 1) % this.count;
+        return i;
+      }
+    }
+    return -1;
   }
 
   randomAliveIndex(): number {

@@ -1,4 +1,4 @@
-import { ARENA, SPAWN } from "@/constants/config";
+import { ARENA, HORDE, SPAWN } from "@/constants/config";
 
 export interface SpawnPoint {
   x: number;
@@ -9,6 +9,13 @@ export interface SpawnPoint {
  * Distribui `count` homens em anéis concêntricos ao redor do centro.
  * Quanto mais homens, maior o raio inicial e mais anéis.
  */
+/** Ponto de reforço na borda da arena (modo horda). */
+export function hordeSpawnPoint(): SpawnPoint {
+  const a = Math.random() * Math.PI * 2;
+  const r = ARENA.radius - HORDE.edgeMargin + (Math.random() - 0.5) * 4;
+  return { x: Math.cos(a) * r, z: Math.sin(a) * r };
+}
+
 export function computeSpawnRing(count: number): SpawnPoint[] {
   const points: SpawnPoint[] = [];
   let radius = SPAWN.baseRadius + Math.sqrt(count) * SPAWN.radiusPerSqrtMan;

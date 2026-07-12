@@ -6,6 +6,7 @@ import { Button } from "@/components/ui/button";
 import { Separator } from "@/components/ui/separator";
 import { useSimulationStore } from "@/store/simulationStore";
 import { formatTime } from "@/utils/random";
+import { BattleChart } from "./BattleChart";
 
 export function EndScreen() {
   const results = useSimulationStore((s) => s.results);
@@ -15,13 +16,20 @@ export function EndScreen() {
   if (!results) return null;
 
   const gorillaWon = results.winner === "gorilla";
-  const title = gorillaWon ? "🏆 Vitória do Gorila" : "🏆 Vitória dos Homens";
+  const horde = results.mode === "horde";
+  const title = horde
+    ? "🌊 Fim da Horda"
+    : gorillaWon
+      ? "🏆 Vitória do Gorila"
+      : "🏆 Vitória dos Homens";
 
   const shareText = [
     `🦍 Gorilla Simulator`,
-    gorillaWon
-      ? `O gorila venceu ${results.initialMen} ${results.initialMen === 1 ? "homem" : "homens"}!`
-      : `${results.initialMen} homens derrotaram o gorila!`,
+    horde
+      ? `Modo Horda: o gorila derrubou ${results.deaths.toLocaleString("pt-BR")} antes de cair!`
+      : gorillaWon
+        ? `O gorila venceu ${results.initialMen} ${results.initialMen === 1 ? "homem" : "homens"}!`
+        : `${results.initialMen} homens derrotaram o gorila!`,
     `⏱️ ${formatTime(results.durationSec)} · 💀 ${results.deaths} mortes · 🧍 ${results.survivors} sobreviventes`,
     `🦍 HP restante: ${results.gorillaHpLeft.toLocaleString("pt-BR")}/${results.gorillaMaxHp.toLocaleString("pt-BR")}`,
     `Quantos homens você acha que precisa?`,
@@ -67,10 +75,27 @@ export function EndScreen() {
           {title}
         </h2>
         <p className="mt-1 text-center text-sm text-zinc-400">
-          {gorillaWon
-            ? "A natureza segue invicta."
-            : "A união fez a força (e muitas baixas)."}
+          {horde ? (
+            <>
+              O gorila derrubou{" "}
+              <span className="font-bold text-amber-300">
+                {results.deaths.toLocaleString("pt-BR")}
+              </span>{" "}
+              antes de cair.
+            </>
+          ) : gorillaWon ? (
+            "A natureza segue invicta."
+          ) : (
+            "A união fez a força (e muitas baixas)."
+          )}
         </p>
+
+        <Separator className="my-5 bg-white/10" />
+
+        <BattleChart
+          history={results.history}
+          gorillaMaxHp={results.gorillaMaxHp}
+        />
 
         <Separator className="my-5 bg-white/10" />
 

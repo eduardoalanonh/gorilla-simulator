@@ -90,3 +90,36 @@ export function freezeCorpse(sim: Simulation, i: number) {
   body.setEnabled(false);
   sim.settled[i] = 1;
 }
+
+/** Recicla um cadáver como reforço novo em folha (modo horda). */
+export function reviveMan(sim: Simulation, i: number, x: number, z: number) {
+  const body = sim.bodies[i];
+  if (!body) return false;
+  body.setEnabled(true);
+  body.setEnabledRotations(false, false, false, false);
+  body.setRotation(IDENTITY_ROT, false);
+  body.setTranslation({ x, y: PHYSICS.manRadius, z }, true);
+  body.setLinvel({ x: 0, y: 0, z: 0 }, false);
+  body.setAngvel({ x: 0, y: 0, z: 0 }, false);
+  body.setLinearDamping(PHYSICS.manDamping);
+
+  sim.posX[i] = x;
+  sim.posY[i] = PHYSICS.manRadius;
+  sim.posZ[i] = z;
+  sim.velX[i] = sim.velY[i] = sim.velZ[i] = 0;
+  sim.state[i] = 1; // Searching
+  sim.hp[i] = sim.manStats.maxHealth;
+  sim.cooldown[i] = Math.random() * sim.manStats.attackCooldown;
+  sim.decideTimer[i] = Math.random() * 0.15;
+  sim.deathT[i] = -1;
+  sim.fearTimer[i] = 0;
+  sim.punchAnim[i] = 0;
+  sim.hitFlash[i] = 0;
+  sim.settled[i] = 0;
+  sim.airborne[i] = 0;
+  sim.lastDist[i] = 999;
+  sim.stuckCount[i] = 0;
+  sim.facing[i] = Math.atan2(-x, -z);
+  sim.aliveCount++;
+  return true;
+}

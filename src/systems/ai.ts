@@ -382,6 +382,7 @@ function applyGorillaBlow(sim: Simulation, gx: number, gz: number, slam: boolean
   const arcCos = slam ? -1.1 : -0.25; // slam = 360°, swipe ≈ 200°
   const maxHits = slam ? 18 : 7; // um golpe só atinge quem está no caminho do braço
   let hits = 0;
+  const deadBefore = sim.deadCount;
 
   sim.grid.forEachInRadius(gx, gz, range, (j) => {
     if (sim.state[j] === EntityState.Dead || hits >= maxHits) return;
@@ -397,6 +398,10 @@ function applyGorillaBlow(sim: Simulation, gx: number, gz: number, slam: boolean
   });
 
   sim.emit(slam ? "slam" : "impact", gx, 0.3, gz, slam ? 2 : 1.2);
+
+  // Vários abatidos num golpe só → kill streak
+  const kills = sim.deadCount - deadBefore;
+  if (kills >= 2) sim.emit("killstreak", gx, 2, gz, kills);
 }
 
 /** Rugido: medo + empurrão leve nos homens próximos. */

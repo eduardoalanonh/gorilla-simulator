@@ -174,6 +174,22 @@ export function ControlPanel() {
 
       <Separator className="bg-white/10" />
 
+      <div className="space-y-1">
+        <CheckRow
+          id="horde"
+          label="🌊 Modo Horda (infinito)"
+          checked={s.hordeMode}
+          onChange={s.toggleHorde}
+          disabled={running}
+        />
+        <p className="pl-6 text-[11px] leading-snug text-zinc-500">
+          Reforços não param de chegar pela borda. Score = quantos o gorila
+          derruba antes de cair.
+        </p>
+      </div>
+
+      <Separator className="bg-white/10" />
+
       <div className="grid grid-cols-1 gap-2.5">
         <CheckRow
           id="healthbars"
@@ -222,16 +238,29 @@ function CheckRow({
   label,
   checked,
   onChange,
+  disabled,
 }: {
   id: string;
   label: string;
   checked: boolean;
   onChange: () => void;
+  disabled?: boolean;
 }) {
   return (
     <div className="flex items-center gap-2.5">
-      <Checkbox id={id} checked={checked} onCheckedChange={onChange} />
-      <Label htmlFor={id} className="cursor-pointer text-sm text-zinc-300">
+      <Checkbox
+        id={id}
+        checked={checked}
+        onCheckedChange={onChange}
+        disabled={disabled}
+      />
+      <Label
+        htmlFor={id}
+        className={cn(
+          "cursor-pointer text-sm text-zinc-300",
+          disabled && "opacity-50",
+        )}
+      >
         {label}
       </Label>
     </div>

@@ -3,10 +3,12 @@
 import { useRef } from "react";
 import * as THREE from "three";
 import { useFrame } from "@react-three/fiber";
-import { MAX_MEN, PHYSICS } from "@/constants/config";
+import { MAX_MEN, MEN_MODIFIERS, PHYSICS } from "@/constants/config";
 import { useSimulationStore } from "@/store/simulationStore";
 import { sim } from "@/systems/simulation";
 import { EntityState } from "@/types/simulation";
+
+const BAR_HEIGHT = { human: 1.92, dog: 1.1, robot: 2.05 } as const;
 
 const _mat = new THREE.Matrix4();
 const _pos = new THREE.Vector3();
@@ -18,6 +20,9 @@ const ZERO = new THREE.Matrix4().makeScale(0, 0, 0);
 export function HealthBars() {
   const meshRef = useRef<THREE.InstancedMesh>(null);
   const show = useSimulationStore((s) => s.showHealthBars);
+  const menModifierId = useSimulationStore((s) => s.menModifierId);
+  const rig = MEN_MODIFIERS.find((m) => m.id === menModifierId)?.rig ?? "human";
+  const barHeight = BAR_HEIGHT[rig];
 
   useFrame(({ camera }) => {
     const mesh = meshRef.current;
@@ -37,7 +42,7 @@ export function HealthBars() {
       const frac = Math.max(sim.hp[i] / maxHp, 0.02);
       _pos.set(
         sim.posX[i],
-        sim.posY[i] - PHYSICS.manRadius + 1.92,
+        sim.posY[i] - PHYSICS.manRadius + barHeight,
         sim.posZ[i],
       );
       _scale.set(0.68 * frac, 0.07, 1);

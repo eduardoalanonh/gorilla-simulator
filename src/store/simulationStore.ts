@@ -30,6 +30,10 @@ interface SimulationStore extends RuntimeStats {
   /** Incrementa a cada reset — usado para re-spawnar o mundo. */
   runId: number;
 
+  /** Popup de kill streak (id força re-animação) */
+  streak: { count: number; id: number } | null;
+  hordeMode: boolean;
+
   menCount: number;
   speed: (typeof SPEED_OPTIONS)[number];
   slowMotion: boolean;
@@ -54,6 +58,8 @@ interface SimulationStore extends RuntimeStats {
   setCameraMode: (m: CameraMode) => void;
   setMenModifier: (id: string) => void;
   setGorillaModifier: (id: string) => void;
+  toggleHorde: () => void;
+  announceStreak: (count: number) => void;
   toggle: (
     key:
       | "slowMotion"
@@ -69,6 +75,9 @@ interface SimulationStore extends RuntimeStats {
 export const useSimulationStore = create<SimulationStore>()((set, get) => ({
   phase: "intro",
   runId: 0,
+
+  streak: null,
+  hordeMode: false,
 
   menCount: 100,
   speed: 1,
@@ -132,6 +141,15 @@ export const useSimulationStore = create<SimulationStore>()((set, get) => ({
       gorillaModifierId,
       runId: s.phase === "ready" ? s.runId + 1 : s.runId,
     })),
+
+  toggleHorde: () =>
+    set((s) => ({
+      hordeMode: !s.hordeMode,
+      runId: s.phase === "ready" ? s.runId + 1 : s.runId,
+    })),
+
+  announceStreak: (count) =>
+    set((s) => ({ streak: { count, id: (s.streak?.id ?? 0) + 1 } })),
 
   toggle: (key) => set((s) => ({ [key]: !s[key] }) as Partial<SimulationStore>),
 

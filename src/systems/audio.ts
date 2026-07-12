@@ -18,6 +18,7 @@ type SoundName =
   | "groan2"
   | "scream"
   | "crit"
+  | "streak"
   | "gorillaStep"
   | "gorillaDie";
 
@@ -412,6 +413,26 @@ export class AudioManager {
       }),
     );
 
+    // Sting de kill streak: dois toms rápidos + ping metálico
+    b.set(
+      "streak",
+      makeBuffer(ctx, 0.5, (t) => {
+        const tom1 = Math.sin(2 * Math.PI * 96 * t) * env(t, 0.003, 0.07);
+        const t2 = Math.max(0, t - 0.11);
+        const tom2 =
+          t >= 0.11 ? Math.sin(2 * Math.PI * 72 * t2) * env(t2, 0.003, 0.1) : 0;
+        const t3 = Math.max(0, t - 0.22);
+        const ping =
+          t >= 0.22
+            ? Math.sin(2 * Math.PI * 1180 * t3) *
+              Math.sin(2 * Math.PI * 1770 * t3) *
+              env(t3, 0.002, 0.12) *
+              0.5
+            : 0;
+        return tom1 + tom2 * 1.1 + ping;
+      }),
+    );
+
     const step = makeBuffer(ctx, 0.16, (t) => {
       const boom = Math.sin(2 * Math.PI * 58 * t) * env(t, 0.004, 0.045);
       return boom + (Math.random() * 2 - 1) * env(t, 0.002, 0.02) * 0.3;
@@ -439,6 +460,7 @@ export class AudioManager {
     volume = 1,
     rateVar = 0.15,
     minInterval = 0.05,
+    fixedRate?: number,
   ) {
     if (!this.ready || !this.listener) return;
     const now = this.listener.context.currentTime;
@@ -454,7 +476,7 @@ export class AudioManager {
     node.setBuffer(buffer);
     node.position.set(x, y, z);
     node.setVolume(volume);
-    node.setPlaybackRate(1 + (Math.random() - 0.5) * rateVar * 2);
+    node.setPlaybackRate(fixedRate ?? 1 + (Math.random() - 0.5) * rateVar * 2);
     node.play();
   }
 
@@ -491,6 +513,19 @@ export class AudioManager {
         if (e.crit)
           this.play("crit", e.x, e.y, e.z, e.source === "men" ? 0.5 : 0.9, 0.12, 0.1);
         break;
+      case "killstreak":
+        // Mais abates = sting mais grave e imponente
+        this.play(
+          "streak",
+          e.x,
+          e.y,
+          e.z,
+          Math.min(1.2, 0.7 + e.power * 0.06),
+          0,
+          0.3,
+          Math.max(0.72, 1.05 - e.power * 0.035),
+        );
+        break;
       case "land":
         this.play("thud", e.x, e.y, e.z, 0.4 * e.power, 0.3, 0.1);
         break;
@@ -525,6 +560,16 @@ export class AudioManager {
       if (!audio) continue;
       const current = audio.getVolume();
       audio.setVolume(current + (target - current) * 0.045);
+    }
+
+    // A percussão acelera conforme a batalha esquenta (as duas camadas
+    // recebem o mesmo rate para permanecerem em sincronia)
+    if (this.drums && this.drumsHeavy) {
+      const targetRate = running ? 1 + intensity * 0.22 : 1;
+      const rate =
+        this.drums.playbackRate + (targetRate - this.drums.playbackRate) * 0.02;
+      this.drums.setPlaybackRate(rate);
+      this.drumsHeavy.setPlaybackRate(rate);
     }
   }
 
