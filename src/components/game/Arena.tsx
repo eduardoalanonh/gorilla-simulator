@@ -7,14 +7,7 @@ import { CuboidCollider, BallCollider, RigidBody } from "@react-three/rapier";
 import { ARENA } from "@/constants/config";
 import { makeDirtTexture } from "@/utils/textures";
 import { mulberry32 } from "@/utils/random";
-
-interface RockDef {
-  x: number;
-  z: number;
-  r: number;
-  ry: number;
-  squash: number;
-}
+import { BIG_ROCKS } from "@/systems/rocks";
 
 function deformedRock(seed: number, detail = 1) {
   const geo = new THREE.IcosahedronGeometry(1, detail);
@@ -33,20 +26,7 @@ export function Arena() {
   const dirtTexture = useMemo(() => makeDirtTexture(1024, 42), []);
   const R = ARENA.radius;
 
-  const bigRocks = useMemo<RockDef[]>(() => {
-    const rng = mulberry32(1337);
-    return Array.from({ length: ARENA.bigRocks }, () => {
-      const a = rng() * Math.PI * 2;
-      const dist = 14 + rng() * (R - 22);
-      return {
-        x: Math.cos(a) * dist,
-        z: Math.sin(a) * dist,
-        r: 0.9 + rng() * 1.5,
-        ry: rng() * Math.PI * 2,
-        squash: 0.7 + rng() * 0.4,
-      };
-    });
-  }, [R]);
+  const bigRocks = BIG_ROCKS;
 
   const rockGeos = useMemo(
     () => bigRocks.map((_, i) => deformedRock(100 + i, 1)),

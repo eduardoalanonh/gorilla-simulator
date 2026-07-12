@@ -91,9 +91,20 @@ export function SimulationLoop() {
     let speedFactor = store.speed * (store.slowMotion ? SLOW_MOTION_FACTOR : 1);
     if (ending.current) speedFactor = Math.min(speedFactor, 0.3); // câmera lenta no golpe final
 
+    // Física só roda durante a batalha (e o desfecho, para corpos assentarem).
+    // Enquanto o jogador só está configurando a simulação (arena parada),
+    // não há nada a resolver — e não dar step aqui evita que um respawn
+    // (troca de quantidade/modificador) resolva alguma sobreposição residual
+    // como um "pulo" visível fora de hora.
+    const physicsActive = store.phase === "running" || store.phase === "ended";
+
     // Sub-stepping com passo fixo
     const h = PHYSICS.fixedStep;
-    accumRef.current += dt * speedFactor;
+    if (physicsActive) {
+      accumRef.current += dt * speedFactor;
+    } else if (accumRef.current !== 0) {
+      accumRef.current = 0;
+    }
     let steps = 0;
     const maxSteps = PHYSICS.maxSubSteps;
     const plannedSteps = Math.min(Math.floor(accumRef.current / h), maxSteps);
